@@ -1,0 +1,56 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { setHomeCurrency, signOutAction } from "@/app/actions/account";
+import { CurrencySelect } from "@/components/currency-select";
+import { Button, Card, Field, Page, SectionTitle, Skeleton, TopBar } from "@/components/ui";
+import { requireUser } from "@/lib/authz";
+import { DeleteAccountButton } from "./delete-account-button";
+
+export const metadata: Metadata = { title: "Settings" };
+
+export default function SettingsPage() {
+  return (
+    <>
+      <TopBar title="Settings" back="/" />
+      <Page>
+        <Suspense fallback={<Skeleton rows={2} />}>
+          <Settings />
+        </Suspense>
+      </Page>
+    </>
+  );
+}
+
+async function Settings() {
+  const user = await requireUser();
+  return (
+    <>
+      <Card className="p-4">
+        <p className="font-medium">{user.name}</p>
+        <p className="text-sm text-muted">{user.email}</p>
+        <form action={signOutAction} className="mt-3">
+          <Button variant="secondary">Sign out</Button>
+        </form>
+      </Card>
+
+      <SectionTitle>Home currency</SectionTitle>
+      <Card className="p-4">
+        <form action={setHomeCurrency} className="space-y-3">
+          <Field label="Your overall total is shown in" hint="New groups start in this currency too.">
+            <CurrencySelect name="homeCurrency" defaultValue={user.homeCurrency} />
+          </Field>
+          <Button variant="secondary">Save</Button>
+        </form>
+      </Card>
+
+      <SectionTitle>Privacy</SectionTitle>
+      <Card className="p-4">
+        <p className="text-sm text-muted">
+          We store only your name and email. Deleting your account removes both; your past expenses stay in your groups
+          under your name so everyone&apos;s balances remain correct.
+        </p>
+        <DeleteAccountButton />
+      </Card>
+    </>
+  );
+}

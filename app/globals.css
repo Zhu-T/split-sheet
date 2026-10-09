@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #efede8;
+  --line: #e2dfd8;
+  --text: #1b1a17;
+  --muted: #6b675f;
+  --accent: #1f6f5c;
+  --accent-ink: #ffffff;
+  --owed: #1f7a4d;
+  --owe: #b4412f;
+  --danger: #b4412f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141412;
+    --surface: #1d1c1a;
+    --surface-2: #262522;
+    --line: #34322e;
+    --text: #efede8;
+    --muted: #a19c92;
+    --accent: #4fb89a;
+    --accent-ink: #0d1f1a;
+    --owed: #5cc98f;
+    --owe: #ef8a74;
+    --danger: #ef8a74;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-owed: var(--owed);
+  --color-owe: var(--owe);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* 16px minimum so iOS Safari never zooms into a focused field. */
+input,
+select,
+textarea {
+  font-size: max(16px, 1rem);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+}
+@utility bottom-safe {
+  bottom: max(env(safe-area-inset-bottom), 1rem);
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}

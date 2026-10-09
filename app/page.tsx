@@ -1,0 +1,115 @@
+import Link from "next/link";
+import { Suspense } from "react";
+import { Card, Initials, Money, Page, Skeleton, TopBar } from "@/components/ui";
+import { requireUser } from "@/lib/authz";
+import { isCurrency, type Currency } from "@/lib/currencies";
+import { getRates } from "@/lib/fx";
+import { convert } from "@/lib/money";
+import { loadMyGroups } from "@/lib/queries";
+import { NewGroupButton } from "./new-group-button";
+
+export default function DashboardPage() {
+  return (
+    <>
+      <TopBar
+        title="Split"
+        action={
+          <Link href="/settings" aria-label="Settings" className="-mr-2 grid size-11 place-items-center rounded-full text-muted">
+            <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" strokeLinecap="round" />
+            </svg>
+          </Link>
+        }
+      />
+      <Page>
+        <Suspense fallback={<Skeleton />}>
+          <Dashboard />
+        </Suspense>
+      </Page>
+    </>
+  );
+}
+
+async function Dashboard() {
+  const user = await requireUser();
+  const groups = await loadMyGroups(user.id);
+  const home: Currency = isCurrency(user.homeCurrency) ? user.homeCurrency : "USD";
+
+  // Overall total in the home currency at today's rates; null if rates are unavailable.
+  let total: number | null = 0;
+  try {
+    const rates = groups.some((g) => g.base !== home) ? await getRates(home) : {};
+    for (const g of groups) {
+      const rate = g.base === home ? 1 : rates[g.base];
+      if (!rate) throw new Error("missing rate");
+      total += convert(g.net, g.base, home, 1 / rate);
+    }
+  } catch {
+    total = null;
+  }
+
+  if (groups.length === 0) {
+    return (
+      <Card className="px-5 py-8 text-center">
+        <h2 className="text-xl font-semibold">Welcome, {user.name.split(" ")[0]}</h2>
+        <p className="mt-2 text-muted">Create a group, or open an invite link a friend sent you.</p>
+        <div className="mt-6">
+          <NewGroupButton homeCurrency={home} />
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card className="px-5 py-5">
+        <p className="text-sm text-muted">Overall</p>
+        {total === null ? (
+          <p className="mt-1 text-muted">Exchange rates are unavailable right now.</p>
+        ) : (
+          <p className="mt-1 text-3xl font-semibold tracking-tight">
+            {total === 0 ? (
+              "All settled up"
+            ) : (
+              <>
+                <span className="text-lg font-medium text-muted">{total > 0 ? "You're owed " : "You owe "}</span>
+                <Money minor={total} currency={home} signed />
+              </>
+            )}
+          </p>
+        )}
+        {total !== null && groups.some((g) => g.base !== home) && (
+          <p className="mt-1 text-xs text-muted">Approximate, converted to {home} at today&apos;s rates.</p>
+        )}
+      </Card>
+
+      <div className="mt-6 mb-2 flex items-center justify-between px-1">
+        <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">Groups</h2>
+        <NewGroupButton homeCurrency={home} variant="secondary" />
+      </div>
+      <Card>
+        <ul className="divide-y divide-line">
+          {groups.map((g) => (
+            <li key={g.id}>
+              <Link href={`/groups/${g.id}`} className="flex min-h-16 items-center gap-3 px-4 py-3 active:bg-surface-2">
+                <Initials name={g.name} />
+                <span className="min-w-0 flex-1 truncate font-medium">{g.name}</span>
+                <span className="text-right text-sm">
+                  {g.net === 0 ? (
+                    <span className="text-muted">settled up</span>
+                  ) : (
+                    <>
+                      <span className="block text-xs text-muted">{g.net > 0 ? "you're owed" : "you owe"}</span>
+                      <Money minor={g.net} currency={g.base} signed className="font-semibold" />
+                    </>
+                  )}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </>
+  );
+}
