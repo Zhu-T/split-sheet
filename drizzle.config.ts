@@ -9,5 +9,6 @@ export default defineConfig({
   schema: "./db/schema.ts",
   out: "./db/migrations",
   dialect: "postgresql",
-  dbCredentials: { url: process.env.DATABASE_URL! },
+  // Migrations prefer the direct (unpooled) connection that Neon's Vercel integration provides.
+  dbCredentials: { url: (process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL)! },
 });

@@ -56,23 +56,17 @@ npm test       # unit tests
 npm run build
 ```
 
-## Deploying with GitHub Actions
+## Deploying
 
-`.github/workflows/deploy.yml` runs lint, tests, the build and `npm audit` on every push and pull request, then:
-
-- **Pull requests** get a Vercel preview deployment, and its URL is posted as a comment on the PR.
-- **Pushes to `main`** run database migrations, then deploy to production.
-
-`vercel.json` turns off Vercel's own Git deployments so nothing deploys twice; GitHub Actions is the only deployer.
+- **Vercel's Git integration deploys.** Pushes to `main` go to production, and pull requests get preview URLs.
+- **Production builds run migrations first.** Vercel runs `npm run vercel-build` (`scripts/vercel-build.mjs`), which applies `db/migrations` before `next build`. If a migration fails, the build fails and nothing goes live. Preview builds skip migrations unless `MIGRATE_ON_PREVIEW=1` is set; only set it when previews use their own Neon branch.
+- **GitHub Actions only checks the code.** `.github/workflows/ci.yml` runs lint, tests, the build and `npm audit`. It needs no secrets.
 
 One-time setup:
 
-1. Run `npx vercel link` locally to create the project. This writes `.vercel/project.json` (gitignored); copy `orgId` and `projectId` from it.
-2. Create a token at https://vercel.com/account/tokens.
-3. Under GitHub repo **Settings** → **Secrets and variables** → **Actions**, add:
-   - `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`
-   - `DATABASE_URL`: the production Neon connection string, used for migrations
-4. Add `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` and `DATABASE_URL` as Vercel environment variables, for Production and Preview. `vercel pull` copies them into the build.
+1. Import the repository in Vercel and add **Neon** from Storage. Neon sets `DATABASE_URL` and `DATABASE_URL_UNPOOLED`; migrations use the unpooled one.
+2. Add `AUTH_SECRET`, `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` as Vercel environment variables.
+3. Optional: to keep failing code out of production, turn on Vercel's **Deployment Checks** for the `Lint, test, build` check (Project → Settings).
 
 ## Security notes
 
