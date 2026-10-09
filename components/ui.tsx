@@ -8,13 +8,16 @@ export function cx(...parts: (string | false | null | undefined)[]) {
 }
 
 const buttonBase =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold transition active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold transition duration-150 ease-out active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100";
 
 export const buttonStyles = {
   primary: cx(buttonBase, "bg-accent text-accent-ink"),
   secondary: cx(buttonBase, "bg-surface-2 text-text"),
   ghost: cx(buttonBase, "text-accent"),
+  /** Secondary destructive actions (remove a member, delete an expense). */
   danger: cx(buttonBase, "bg-surface-2 text-danger"),
+  /** Irreversible, high-stakes actions only (delete account): highest contrast. */
+  destructive: cx(buttonBase, "bg-danger text-danger-ink"),
 };
 
 export function Button({
@@ -28,10 +31,11 @@ export function Button({
 /** Sticky top bar that clears the notch. */
 export function TopBar({ title, back, action }: { title: ReactNode; back?: string; action?: ReactNode }) {
   return (
-    <header className="pt-safe sticky top-0 z-10 border-b border-line bg-bg/90 backdrop-blur">
+    // Named so route transitions keep it fixed while the page content slides.
+    <header style={{ viewTransitionName: "top-bar" }} className="pt-safe sticky top-0 z-10 border-b border-line bg-bg/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-2xl items-center gap-2 px-4">
         {back && (
-          <Link href={back} aria-label="Back" className="-ml-2 grid size-11 place-items-center rounded-full text-accent">
+          <Link href={back} transitionTypes={["nav-back"]} aria-label="Back" className="-ml-2 grid size-11 place-items-center rounded-full text-accent transition active:scale-90">
             <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <path d="M15 5l-7 7 7 7" />
             </svg>
@@ -78,17 +82,19 @@ export function Initials({ name, className }: { name: string; className?: string
 
 export function Skeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div className="animate-pulse space-y-3" aria-busy aria-label="Loading">
-      <div className="h-28 rounded-2xl bg-surface-2" />
+    <div className="space-y-3" aria-busy aria-label="Loading">
+      <div className="shimmer h-28 rounded-2xl" />
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="h-14 rounded-xl bg-surface-2" />
+        <div key={i} className="shimmer h-14 rounded-xl" />
       ))}
     </div>
   );
 }
 
+// text-base (16px) keeps iOS Safari from zooming into a focused field. Every input sets
+// its own size (inputs default to ~13px), so larger fields like the amount can use text-4xl.
 export const inputClass =
-  "min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-text outline-none placeholder:text-muted focus:border-accent";
+  "min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-base text-text outline-none placeholder:text-muted transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/20";
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
   return (

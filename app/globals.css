@@ -12,6 +12,14 @@
   --owed: #1f7a4d;
   --owe: #b4412f;
   --danger: #b4412f;
+  --danger-ink: #ffffff;
+  --focus: #1f6f5c;
+
+  /* Motion: exits are quick so old content doesn't compete; entrances are gentler. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-exit: 150ms;
+  --duration-enter: 210ms;
+  --duration-move: 380ms;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,6 +35,8 @@
     --owed: #5cc98f;
     --owe: #ef8a74;
     --danger: #ef8a74;
+    --danger-ink: #2a0f09;
+    --focus: #7fd3ba;
   }
 }
 
@@ -42,6 +52,7 @@
   --color-owed: var(--owed);
   --color-owe: var(--owe);
   --color-danger: var(--danger);
+  --color-danger-ink: var(--danger-ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -57,11 +68,10 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-/* 16px minimum so iOS Safari never zooms into a focused field. */
-input,
-select,
-textarea {
-  font-size: max(16px, 1rem);
+/* Visible keyboard focus everywhere (mouse/touch focus stays clean). */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 @utility pt-safe {
@@ -74,6 +84,200 @@ textarea {
   bottom: max(env(safe-area-inset-bottom), 1rem);
 }
 
-dialog::backdrop {
+/* ---------- Sheets: slide up on phones, fade + scale on wider screens ---------- */
+
+dialog.sheet {
+  transition:
+    translate var(--duration-move) var(--ease-out),
+    opacity var(--duration-enter) ease-out,
+    overlay var(--duration-move) allow-discrete,
+    display var(--duration-move) allow-discrete;
+  translate: 0 100%;
+}
+dialog.sheet[open] {
+  translate: 0 0;
+}
+@starting-style {
+  dialog.sheet[open] {
+    translate: 0 100%;
+  }
+}
+@media (min-width: 640px) {
+  dialog.sheet {
+    translate: 0 12px;
+    scale: 0.97;
+    opacity: 0;
+    transition:
+      translate var(--duration-enter) var(--ease-out),
+      scale var(--duration-enter) var(--ease-out),
+      opacity var(--duration-enter) ease-out,
+      overlay var(--duration-enter) allow-discrete,
+      display var(--duration-enter) allow-discrete;
+  }
+  dialog.sheet[open] {
+    translate: 0 0;
+    scale: 1;
+    opacity: 1;
+  }
+  @starting-style {
+    dialog.sheet[open] {
+      translate: 0 12px;
+      scale: 0.97;
+      opacity: 0;
+    }
+  }
+}
+
+dialog.sheet::backdrop {
+  background: rgb(0 0 0 / 0);
+  transition:
+    background-color var(--duration-enter) ease-out,
+    overlay var(--duration-move) allow-discrete,
+    display var(--duration-move) allow-discrete;
+}
+dialog.sheet[open]::backdrop {
   background: rgb(0 0 0 / 0.45);
+}
+@starting-style {
+  dialog.sheet[open]::backdrop {
+    background: rgb(0 0 0 / 0);
+  }
+}
+
+/* ---------- Content entrance: lists rise in with a short stagger ---------- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+.rise {
+  animation: rise var(--duration-move) var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 10) * 30ms);
+}
+
+@keyframes pop {
+  0% {
+    scale: 0.6;
+  }
+  60% {
+    scale: 1.15;
+  }
+}
+.pop {
+  animation: pop 240ms var(--ease-out);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+    scale: 0.96;
+  }
+}
+.toast {
+  animation: toast-in var(--duration-enter) var(--ease-out) both;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.shimmer {
+  background: linear-gradient(90deg, var(--surface-2) 30%, var(--line) 50%, var(--surface-2) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* ---------- Route transitions (React <ViewTransition>) ---------- */
+
+::view-transition {
+  pointer-events: none; /* clicks during a transition reach the live page */
+}
+
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes vt-slide-y {
+  from {
+    translate: 0 10px;
+  }
+}
+@keyframes vt-slide-x {
+  from {
+    translate: var(--slide-offset) 0;
+  }
+}
+
+/* Skeleton leaves quickly, real content arrives gently once it's gone. */
+::view-transition-old(.reveal-exit) {
+  animation: var(--duration-exit) ease-out both vt-fade reverse;
+}
+::view-transition-new(.reveal-enter) {
+  animation:
+    var(--duration-enter) ease-out var(--duration-exit) both vt-fade,
+    var(--duration-move) var(--ease-out) both vt-slide-y;
+}
+
+/* Deeper into the app slides left; going back slides right. */
+::view-transition-old(.nav-forward) {
+  --slide-offset: -48px;
+  animation:
+    var(--duration-exit) ease-in both vt-fade reverse,
+    var(--duration-move) var(--ease-out) both vt-slide-x reverse;
+}
+::view-transition-new(.nav-forward) {
+  --slide-offset: 48px;
+  animation:
+    var(--duration-enter) ease-out var(--duration-exit) both vt-fade,
+    var(--duration-move) var(--ease-out) both vt-slide-x;
+}
+::view-transition-old(.nav-back) {
+  --slide-offset: 48px;
+  animation:
+    var(--duration-exit) ease-in both vt-fade reverse,
+    var(--duration-move) var(--ease-out) both vt-slide-x reverse;
+}
+::view-transition-new(.nav-back) {
+  --slide-offset: -48px;
+  animation:
+    var(--duration-enter) ease-out var(--duration-exit) both vt-fade,
+    var(--duration-move) var(--ease-out) both vt-slide-x;
+}
+
+/* The top bar is the spatial anchor: it never slides. */
+::view-transition-group(top-bar) {
+  animation: none;
+  z-index: 100;
+}
+::view-transition-old(top-bar) {
+  display: none;
+}
+::view-transition-new(top-bar) {
+  animation: none;
+}
+
+/* ---------- Reduced motion: effectively no animation; state changes are instant ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
 }

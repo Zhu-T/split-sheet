@@ -1,8 +1,9 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
-import { Button, Card, Money, SectionTitle, cx } from "@/components/ui";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { CountUp } from "@/components/count-up";
+import { Button, Card, Money, SectionTitle, cx, inputClass } from "@/components/ui";
 import type { Currency } from "@/lib/currencies";
 import { convert } from "@/lib/money";
 import type { Transfer } from "@/lib/simplify";
@@ -39,9 +40,14 @@ export type GroupData = {
 
 type SettleDraft = { from: string; to: string; amountMinor: number };
 
+type ExpenseSheetState = { open: boolean; expense: ExpenseView | null; key: number };
+type SettleSheetState = { open: boolean; draft: SettleDraft | null; existing: ExpenseView | null; key: number };
+
 export function GroupScreen({ data }: { data: GroupData }) {
-  const [editing, setEditing] = useState<ExpenseView | "new" | null>(null);
-  const [settling, setSettling] = useState<SettleDraft | null>(null);
+  // Sheets stay mounted while closing so they can animate out; `key` resets their form on each open.
+  const [expenseSheet, setExpenseSheet] = useState<ExpenseSheetState>({ open: false, expense: null, key: 0 });
+  const [settleSheet, setSettleSheet] = useState<SettleSheetState>({ open: false, draft: null, existing: null, key: 0 });
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const justCreated = useSearchParams().get("created") === "1";
 
   const names = useMemo(() => new Map(data.members.map((m) => [m.id, m.name])), [data.members]);
@@ -51,15 +57,53 @@ export function GroupScreen({ data }: { data: GroupData }) {
   const mine = data.transfers.filter((t) => t.from === me || t.to === me);
   const others = data.transfers.filter((t) => t.from !== me && t.to !== me);
 
+  const openEntry = (e: ExpenseView | null) => {
+    if (e?.kind === "settlement") setSettleSheet((s) => ({ open: true, draft: null, existing: e, key: s.key + 1 }));
+    else setExpenseSheet((s) => ({ open: true, expense: e, key: s.key + 1 }));
+  };
+  const openSettle = (t: SettleDraft) => setSettleSheet((s) => ({ open: true, draft: t, existing: null, key: s.key + 1 }));
+  const done = (text?: string) => {
+    setExpenseSheet((s) => ({ ...s, open: false }));
+    setSettleSheet((s) => ({ ...s, open: false }));
+    if (text) setToast({ id: Date.now(), text });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Shortcuts for keyboard users: N adds an expense, / jumps to search.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey || document.querySelector("dialog[open]")) return;
+      if ((e.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setExpenseSheet((s) => ({ open: true, expense: null, key: s.key + 1 }));
+      } else if (e.key === "/") {
+        const search = document.getElementById("activity-search");
+        if (search) {
+          e.preventDefault();
+          search.focus();
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <>
       {justCreated && data.expenses.length === 0 && (
-        <Card className="mb-4 px-4 py-3 text-sm">
+        <Card className="rise mb-4 px-4 py-3 text-sm">
           Group created. Invite people from <span className="font-semibold">Members</span> (top right), or add an expense.
         </Card>
       )}
 
-      <Card className="px-5 py-5">
+      {/* Hierarchy: the one number that matters comes first and largest. */}
+      <Card className="rise px-5 py-5">
         <p className="text-sm text-muted">Your balance</p>
         <p className="mt-1 text-3xl font-semibold tracking-tight">
           {myNet === 0 ? (
@@ -67,25 +111,29 @@ export function GroupScreen({ data }: { data: GroupData }) {
           ) : (
             <>
               <span className="text-lg font-medium text-muted">{myNet > 0 ? "You're owed " : "You owe "}</span>
-              <Money minor={myNet} currency={data.base} signed />
+              <CountUp minor={myNet} currency={data.base} signed />
             </>
           )}
         </p>
         {mine.length > 0 && (
           <ul className="mt-4 space-y-2">
             {mine.map((t) => (
-              <TransferRow key={t.from + t.to} t={t} base={data.base} nameOf={nameOf} onSettle={() => setSettling(t)} />
+              <TransferRow key={t.from + t.to} t={t} base={data.base} nameOf={nameOf} onSettle={() => openSettle(t)} />
             ))}
           </ul>
         )}
+        {/* Progressive disclosure: other people's debts are one tap away, not in the way. */}
         {others.length > 0 && (
-          <details className="mt-3 group">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm font-medium text-accent">
+          <details className="group mt-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-medium text-accent">
+              <svg viewBox="0 0 24 24" className="size-4 transition-transform duration-200 group-open:rotate-90" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
               Everyone else ({others.length})
             </summary>
             <ul className="mt-1 space-y-2">
-              {others.map((t) => (
-                <TransferRow key={t.from + t.to} t={t} base={data.base} nameOf={nameOf} onSettle={() => setSettling(t)} />
+              {others.map((t, i) => (
+                <TransferRow key={t.from + t.to} index={i} t={t} base={data.base} nameOf={nameOf} onSettle={() => openSettle(t)} />
               ))}
             </ul>
           </details>
@@ -93,10 +141,22 @@ export function GroupScreen({ data }: { data: GroupData }) {
       </Card>
 
       <SectionTitle>Activity</SectionTitle>
-      <Activity data={data} nameOf={nameOf} onOpen={setEditing} />
+      <Activity data={data} nameOf={nameOf} onOpen={openEntry} />
 
-      <div className="bottom-safe pointer-events-none fixed inset-x-0 z-10 mx-auto flex max-w-2xl justify-end px-4">
-        <Button className="pointer-events-auto h-14 rounded-full px-6 shadow-lg" onClick={() => setEditing("new")}>
+      <div className="bottom-safe pointer-events-none fixed inset-x-0 z-10 mx-auto flex max-w-2xl flex-col items-end gap-3 px-4">
+        <div role="status" aria-live="polite" className="w-full">
+          {toast && (
+            <p key={toast.id} className="toast mx-auto w-fit rounded-full bg-text px-4 py-2.5 text-sm font-medium text-bg shadow-lg">
+              {toast.text}
+            </p>
+          )}
+        </div>
+        <Button
+          className="pointer-events-auto h-14 rounded-full px-6 shadow-lg"
+          onClick={() => openEntry(null)}
+          aria-keyshortcuts="n"
+          title="Add expense (N)"
+        >
           <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
@@ -105,22 +165,21 @@ export function GroupScreen({ data }: { data: GroupData }) {
       </div>
 
       <ExpenseSheet
-        key={`expense-${editing === null ? "closed" : editing === "new" ? "new" : editing.id}`}
-        open={editing !== null && (editing === "new" || editing.kind === "expense")}
-        expense={editing === "new" ? null : editing}
+        key={`expense-${expenseSheet.key}`}
+        open={expenseSheet.open}
+        expense={expenseSheet.expense}
         data={data}
-        onClose={() => setEditing(null)}
+        onClose={() => done()}
+        onDone={done}
       />
       <SettleSheet
-        key={settling ? `settle-${settling.from}-${settling.to}` : editing && editing !== "new" && editing.kind === "settlement" ? `settle-${editing.id}` : "settle-closed"}
-        open={settling !== null || (editing !== null && editing !== "new" && editing.kind === "settlement")}
-        draft={settling}
-        existing={editing !== null && editing !== "new" && editing.kind === "settlement" ? editing : null}
+        key={`settle-${settleSheet.key}`}
+        open={settleSheet.open}
+        draft={settleSheet.draft}
+        existing={settleSheet.existing}
         data={data}
-        onClose={() => {
-          setSettling(null);
-          setEditing(null);
-        }}
+        onClose={() => done()}
+        onDone={done}
       />
     </>
   );
@@ -131,14 +190,16 @@ function TransferRow({
   base,
   nameOf,
   onSettle,
+  index,
 }: {
+  index?: number;
   t: Transfer;
   base: Currency;
   nameOf: (id: string) => string;
   onSettle: () => void;
 }) {
   return (
-    <li className="flex items-center gap-3">
+    <li className={cx("flex items-center gap-3", index !== undefined && "rise")} style={index !== undefined ? ({ "--i": index } as CSSProperties) : undefined}>
       <span className="min-w-0 flex-1 text-[15px]">
         {/* Names truncate; the amount always stays fully visible on its own line. */}
         <span className="block truncate">
@@ -186,11 +247,13 @@ function Activity({
     <>
       {data.expenses.length > 8 && (
         <input
+          id="activity-search"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search expenses"
-          className="mb-3 min-h-11 w-full rounded-xl border border-line bg-surface px-3 outline-none focus:border-accent"
+          aria-keyshortcuts="/"
+          className={cx(inputClass, "mb-3")}
         />
       )}
       <Card>
@@ -198,9 +261,9 @@ function Activity({
           <p className="px-4 py-8 text-center text-muted">{query ? "No matches." : "No expenses yet."}</p>
         ) : (
           <ul className="divide-y divide-line">
-            {items.map((item) =>
+            {items.map((item, i) =>
               item.type === "joined" ? (
-                <li key={`j-${item.member.id}`} className="flex min-h-12 items-center gap-3 px-4 py-2 text-sm text-muted">
+                <li key={`j-${item.member.id}`} className="rise flex min-h-12 items-center gap-3 px-4 py-2 text-sm text-muted" style={{ "--i": i } as CSSProperties}>
                   <span className="grid size-9 place-items-center">•</span>
                   <span className="min-w-0 flex-1 truncate">
                     {nameOf(item.member.id) === "You" ? "You joined" : `${item.member.name} joined`}
@@ -208,7 +271,7 @@ function Activity({
                   <span className="tabular-nums">{formatDate(item.sortKey)}</span>
                 </li>
               ) : (
-                <ExpenseRow key={item.expense.id} e={item.expense} data={data} nameOf={nameOf} onOpen={onOpen} />
+                <ExpenseRow key={item.expense.id} index={i} e={item.expense} data={data} nameOf={nameOf} onOpen={onOpen} />
               ),
             )}
           </ul>
@@ -223,7 +286,9 @@ function ExpenseRow({
   data,
   nameOf,
   onOpen,
+  index,
 }: {
+  index: number;
   e: ExpenseView;
   data: GroupData;
   nameOf: (id: string) => string;
@@ -236,8 +301,12 @@ function ExpenseRow({
   const settlement = e.kind === "settlement";
 
   return (
-    <li>
-      <button type="button" onClick={() => onOpen(e)} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-2">
+    <li className="rise" style={{ "--i": index } as CSSProperties}>
+      <button
+        type="button"
+        onClick={() => onOpen(e)}
+        className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-surface-2/60 active:bg-surface-2"
+      >
         <span className="w-9 shrink-0 text-center text-xs leading-tight text-muted uppercase tabular-nums">
           {formatDate(e.date).split(" ").map((p) => (
             <span key={p} className="block">

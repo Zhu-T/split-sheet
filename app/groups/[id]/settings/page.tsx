@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { PageMotion } from "@/components/motion";
 import { Card, Page, SectionTitle, Skeleton, TopBar, buttonStyles } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
 import { loadMembers } from "@/lib/queries";
@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Group settings" };
 
 export default function GroupSettingsPage({ params }: PageProps<"/groups/[id]/settings">) {
   return (
-    <Suspense
+    <PageMotion
       fallback={
         <>
           <TopBar title="Members & settings" />
@@ -20,7 +20,7 @@ export default function GroupSettingsPage({ params }: PageProps<"/groups/[id]/se
       }
     >
       <Settings params={params} />
-    </Suspense>
+    </PageMotion>
   );
 }
 

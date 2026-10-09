@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import type { CSSProperties } from "react";
+import { CountUp } from "@/components/count-up";
+import { PageMotion } from "@/components/motion";
 import { Card, Initials, Money, Page, Skeleton, TopBar } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
 import { isCurrency, type Currency } from "@/lib/currencies";
@@ -14,7 +16,7 @@ export default function DashboardPage() {
       <TopBar
         title="Split"
         action={
-          <Link href="/settings" aria-label="Settings" className="-mr-2 grid size-11 place-items-center rounded-full text-muted">
+          <Link href="/settings" transitionTypes={["nav-forward"]} aria-label="Settings" className="-mr-2 grid size-11 place-items-center rounded-full text-muted transition active:scale-90">
             <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="12" cy="8" r="4" />
               <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" strokeLinecap="round" />
@@ -23,9 +25,9 @@ export default function DashboardPage() {
         }
       />
       <Page>
-        <Suspense fallback={<Skeleton />}>
+        <PageMotion fallback={<Skeleton />}>
           <Dashboard />
-        </Suspense>
+        </PageMotion>
       </Page>
     </>
   );
@@ -51,7 +53,7 @@ async function Dashboard() {
 
   if (groups.length === 0) {
     return (
-      <Card className="px-5 py-8 text-center">
+      <Card className="rise px-5 py-8 text-center">
         <h2 className="text-xl font-semibold">Welcome, {user.name.split(" ")[0]}</h2>
         <p className="mt-2 text-muted">Create a group, or open an invite link a friend sent you.</p>
         <div className="mt-6">
@@ -63,7 +65,7 @@ async function Dashboard() {
 
   return (
     <>
-      <Card className="px-5 py-5">
+      <Card className="rise px-5 py-5">
         <p className="text-sm text-muted">Overall</p>
         {total === null ? (
           <p className="mt-1 text-muted">Exchange rates are unavailable right now.</p>
@@ -74,7 +76,7 @@ async function Dashboard() {
             ) : (
               <>
                 <span className="text-lg font-medium text-muted">{total > 0 ? "You're owed " : "You owe "}</span>
-                <Money minor={total} currency={home} signed />
+                <CountUp minor={total} currency={home} signed />
               </>
             )}
           </p>
@@ -90,11 +92,18 @@ async function Dashboard() {
       </div>
       <Card>
         <ul className="divide-y divide-line">
-          {groups.map((g) => (
-            <li key={g.id}>
-              <Link href={`/groups/${g.id}`} className="flex min-h-16 items-center gap-3 px-4 py-3 active:bg-surface-2">
+          {groups.map((g, i) => (
+            <li key={g.id} className="rise" style={{ "--i": i + 1 } as CSSProperties}>
+              <Link
+                href={`/groups/${g.id}`}
+                transitionTypes={["nav-forward"]}
+                className="flex min-h-16 items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-surface-2/60 active:bg-surface-2"
+              >
                 <Initials name={g.name} />
                 <span className="min-w-0 flex-1 truncate font-medium">{g.name}</span>
+                <svg aria-hidden viewBox="0 0 24 24" className="order-last size-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
                 <span className="text-right text-sm">
                   {g.net === 0 ? (
                     <span className="text-muted">settled up</span>

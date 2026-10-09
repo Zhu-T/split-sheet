@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { count, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
+import { PageMotion } from "@/components/motion";
 import { Card, Page, Skeleton, TopBar } from "@/components/ui";
 import { db, schema } from "@/db";
 import { requireUser } from "@/lib/authz";
@@ -14,9 +14,9 @@ export default function JoinPage({ params }: PageProps<"/join/[token]">) {
     <>
       <TopBar title="Join group" back="/" />
       <Page>
-        <Suspense fallback={<Skeleton rows={0} />}>
+        <PageMotion fallback={<Skeleton rows={0} />}>
           <Join params={params} />
-        </Suspense>
+        </PageMotion>
       </Page>
     </>
   );

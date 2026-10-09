@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
+import { PageMotion } from "@/components/motion";
 import { Page, Skeleton, TopBar } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
 import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Group" };
 
 export default function GroupPage({ params }: PageProps<"/groups/[id]">) {
   return (
-    <Suspense
+    <PageMotion
       fallback={
         <>
           <TopBar title="" back="/" />
@@ -23,7 +23,7 @@ export default function GroupPage({ params }: PageProps<"/groups/[id]">) {
       }
     >
       <Group params={params} />
-    </Suspense>
+    </PageMotion>
   );
 }
 
@@ -80,8 +80,9 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
         action={
           <Link
             href={`/groups/${group.id}/settings`}
-            aria-label="Group settings"
-            className="-mr-2 grid size-11 place-items-center rounded-full text-muted"
+            transitionTypes={["nav-forward"]}
+            aria-label="Members and group settings"
+            className="-mr-2 grid size-11 place-items-center rounded-full text-muted transition active:scale-90"
           >
             <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
               <circle cx="9" cy="8" r="3.5" />

@@ -8,7 +8,7 @@ export function DeleteAccountButton() {
   const [pending, startTransition] = useTransition();
   return (
     <Button
-      variant="danger"
+      variant="destructive"
       className="mt-3"
       disabled={pending}
       onClick={() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useState, useTransition, type CSSProperties } from "react";
 import { addMember, rotateInvite, setMemberActive, updateGroup, updateMember } from "@/app/actions/groups";
 import { CurrencySelect } from "@/components/currency-select";
 import { Sheet } from "@/components/sheet";
@@ -64,17 +64,23 @@ export function MembersList({
   isOwner: boolean;
   myMemberId: string;
 }) {
-  const [editing, setEditing] = useState<MemberItem | "new" | null>(null);
+  // The sheet stays mounted while closing so it can animate out; `key` resets the form per open.
+  const [sheet, setSheet] = useState<{ open: boolean; member: MemberItem | null; key: number }>({ open: false, member: null, key: 0 });
+  const openSheet = (member: MemberItem | null) => setSheet((s) => ({ open: true, member, key: s.key + 1 }));
   const [pending, startTransition] = useTransition();
 
   return (
     <>
       <Card>
         <ul className="divide-y divide-line">
-          {members.map((m) => (
-            <li key={m.id} className={cx("flex min-h-16 items-center gap-3 px-4 py-2", !m.active && "opacity-60")}>
+          {members.map((m, i) => (
+            <li
+              key={m.id}
+              className={cx("rise flex min-h-16 items-center gap-3 px-4 py-2 transition-opacity", !m.active && "opacity-60")}
+              style={{ "--i": i } as CSSProperties}
+            >
               <Initials name={m.name} />
-              <button type="button" onClick={() => setEditing(m)} className="min-w-0 flex-1 text-left">
+              <button type="button" onClick={() => openSheet(m)} className="min-w-0 flex-1 text-left">
                 <span className="block truncate font-medium">
                   {m.name}
                   {m.id === myMemberId && <span className="text-muted"> (you)</span>}
@@ -102,24 +108,33 @@ export function MembersList({
           ))}
         </ul>
         <div className="border-t border-line p-3">
-          <Button variant="ghost" className="w-full" onClick={() => setEditing("new")}>
+          <Button variant="ghost" className="w-full" onClick={() => openSheet(null)}>
             Add someone by name
           </Button>
         </div>
       </Card>
-      {editing && (
-        <MemberSheet
-          key={editing === "new" ? "new" : editing.id}
-          groupId={groupId}
-          member={editing === "new" ? null : editing}
-          onClose={() => setEditing(null)}
-        />
-      )}
+      <MemberSheet
+        key={sheet.key}
+        open={sheet.open}
+        groupId={groupId}
+        member={sheet.member}
+        onClose={() => setSheet((s) => ({ ...s, open: false }))}
+      />
     </>
   );
 }
 
-function MemberSheet({ groupId, member, onClose }: { groupId: string; member: MemberItem | null; onClose: () => void }) {
+function MemberSheet({
+  open,
+  groupId,
+  member,
+  onClose,
+}: {
+  open: boolean;
+  groupId: string;
+  member: MemberItem | null;
+  onClose: () => void;
+}) {
   const action = member ? updateMember.bind(null, groupId, member.id) : addMember.bind(null, groupId);
   const [state, formAction, pending] = useActionState(async (prev: { error?: string }, form: FormData) => {
     const result = await action(prev, form);
@@ -130,7 +145,7 @@ function MemberSheet({ groupId, member, onClose }: { groupId: string; member: Me
 
   return (
     <Sheet
-      open
+      open={open}
       onClose={onClose}
       title={member ? "Edit member" : "Add someone"}
       footer={

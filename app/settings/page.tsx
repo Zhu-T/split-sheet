@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { setHomeCurrency, signOutAction } from "@/app/actions/account";
 import { CurrencySelect } from "@/components/currency-select";
+import { PageMotion } from "@/components/motion";
 import { Button, Card, Field, Page, SectionTitle, Skeleton, TopBar } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
 import { DeleteAccountButton } from "./delete-account-button";
@@ -13,9 +13,9 @@ export default function SettingsPage() {
     <>
       <TopBar title="Settings" back="/" />
       <Page>
-        <Suspense fallback={<Skeleton rows={2} />}>
+        <PageMotion fallback={<Skeleton rows={2} />}>
           <Settings />
-        </Suspense>
+        </PageMotion>
       </Page>
     </>
   );

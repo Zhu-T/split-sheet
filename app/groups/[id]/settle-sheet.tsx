@@ -14,12 +14,14 @@ export function SettleSheet({
   existing,
   data,
   onClose,
+  onDone,
 }: {
   open: boolean;
   draft: { from: string; to: string; amountMinor: number } | null;
   existing: ExpenseView | null;
   data: GroupData;
   onClose: () => void;
+  onDone: (message: string) => void;
 }) {
   const active = data.members.filter((m) => m.active);
   const [from, setFrom] = useState(existing?.payerId ?? draft?.from ?? data.myMemberId);
@@ -50,7 +52,7 @@ export function SettleSheet({
         splits: [{ memberId: to, value: amount }],
       });
       if (result.error) setError(result.error);
-      else onClose();
+      else onDone(existing ? "Payment updated" : "Payment recorded");
     });
   }
 
@@ -59,7 +61,7 @@ export function SettleSheet({
     startTransition(async () => {
       const result = await deleteExpense(data.groupId, existing.id);
       if (result.error) setError(result.error);
-      else onClose();
+      else onDone("Payment deleted");
     });
   }
 
@@ -69,16 +71,9 @@ export function SettleSheet({
       onClose={onClose}
       title={existing ? "Edit payment" : "Record a payment"}
       footer={
-        <div className="flex gap-2">
-          {existing && (
-            <Button type="button" variant="danger" onClick={remove} disabled={pending}>
-              Delete
-            </Button>
-          )}
-          <Button type="button" className="flex-1" onClick={submit} disabled={pending || !to || from === to}>
-            {pending ? "Saving…" : "Save payment"}
-          </Button>
-        </div>
+        <Button type="button" className="w-full" onClick={submit} disabled={pending || !to || from === to}>
+          {pending ? "Saving…" : existing ? "Save changes" : "Record payment"}
+        </Button>
       }
     >
       <form
@@ -117,7 +112,7 @@ export function SettleSheet({
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00"
-            className="h-16 w-full rounded-xl border border-line bg-surface px-3 text-3xl font-semibold tabular-nums outline-none focus:border-accent"
+            className="h-16 w-full rounded-xl border border-line bg-surface px-3 text-3xl font-semibold tabular-nums outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/20"
           />
         </Field>
         <Field label="Date">
@@ -125,6 +120,14 @@ export function SettleSheet({
         </Field>
         {from === to && <p className="text-sm text-muted">Pick two different people.</p>}
         <ErrorText>{error}</ErrorText>
+        {/* Kept apart from the primary action so it can't be tapped by accident. */}
+        {existing && (
+          <div className="border-t border-line pt-4">
+            <Button type="button" variant="danger" className="w-full" onClick={remove} disabled={pending}>
+              Delete payment
+            </Button>
+          </div>
+        )}
       </form>
     </Sheet>
   );
