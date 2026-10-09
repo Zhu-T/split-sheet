@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageMotion } from "@/components/motion";
-import { Page, Skeleton, TopBar } from "@/components/ui";
+import { Card, Initials, Page, Skeleton, TopBar, cx } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
 import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRates } from "@/lib/fx";
-import { asCurrency, balancesFor, loadExpenses, loadMembers } from "@/lib/queries";
+import { asCurrency, balancesFor, loadExpenses, loadGroupNav, loadMembers } from "@/lib/queries";
 import { GroupScreen, type GroupData } from "./group-screen";
 
 export const metadata: Metadata = { title: "Group" };
@@ -15,8 +15,8 @@ export default function GroupPage({ params }: PageProps<"/groups/[id]">) {
     <PageMotion
       fallback={
         <>
-          <TopBar title="" back="/" />
-          <Page>
+          <TopBar wide title="" back="/" />
+          <Page wide>
             <Skeleton />
           </Page>
         </>
@@ -29,9 +29,9 @@ export default function GroupPage({ params }: PageProps<"/groups/[id]">) {
 
 async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
   const { id } = await params;
-  const { group, member } = await requireMember(id);
+  const { group, member, user } = await requireMember(id);
   const base = asCurrency(group.baseCurrency);
-  const [members, expenses] = await Promise.all([loadMembers(id), loadExpenses(id)]);
+  const [members, expenses, myGroups] = await Promise.all([loadMembers(id), loadExpenses(id), loadGroupNav(user.id)]);
   const { balances, transfers } = balancesFor(expenses, base);
 
   // Suggested rates for entering foreign-currency expenses (base units per 1 unit of X).
@@ -75,6 +75,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
   return (
     <>
       <TopBar
+        wide
         title={group.name}
         back="/"
         action={
@@ -91,9 +92,44 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
           </Link>
         }
       />
-      <Page>
-        <GroupScreen data={data} />
+      <Page wide>
+        <GroupScreen data={data} nav={<GroupNav groups={myGroups} currentId={group.id} />} />
       </Page>
     </>
+  );
+}
+
+/** Desktop sidebar: jump between groups without going back to the dashboard. */
+function GroupNav({ groups, currentId }: { groups: { id: string; name: string }[]; currentId: string }) {
+  return (
+    <Card className="overflow-hidden">
+      <Link
+        href="/"
+        transitionTypes={["nav-back"]}
+        className="flex min-h-11 items-center gap-2 border-b border-line px-4 text-sm font-medium text-accent hover:bg-surface-2/60"
+      >
+        All groups
+      </Link>
+      <ul className="py-1">
+        {groups.map((g) => {
+          const current = g.id === currentId;
+          return (
+            <li key={g.id}>
+              <Link
+                href={`/groups/${g.id}`}
+                aria-current={current ? "page" : undefined}
+                className={cx(
+                  "flex min-h-11 items-center gap-2 px-3 text-sm transition-colors hover:bg-surface-2/60",
+                  current && "bg-surface-2 font-semibold",
+                )}
+              >
+                <Initials name={g.name} className="size-7 text-xs" />
+                <span className="truncate">{g.name}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }

@@ -29,11 +29,11 @@ export function Button({
 }
 
 /** Sticky top bar that clears the notch. */
-export function TopBar({ title, back, action }: { title: ReactNode; back?: string; action?: ReactNode }) {
+export function TopBar({ title, back, action, wide }: { title: ReactNode; back?: string; action?: ReactNode; wide?: boolean }) {
   return (
     // Named so route transitions keep it fixed while the page content slides.
     <header style={{ viewTransitionName: "top-bar" }} className="pt-safe sticky top-0 z-10 border-b border-line bg-bg/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-2xl items-center gap-2 px-4">
+      <div className={cx("mx-auto flex h-14 items-center gap-2 px-4", wide ? "max-w-6xl" : "max-w-2xl")}>
         {back && (
           <Link href={back} transitionTypes={["nav-back"]} aria-label="Back" className="-ml-2 grid size-11 place-items-center rounded-full text-accent transition active:scale-90">
             <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -48,8 +48,9 @@ export function TopBar({ title, back, action }: { title: ReactNode; back?: strin
   );
 }
 
-export function Page({ children }: { children: ReactNode }) {
-  return <main className="mx-auto w-full max-w-2xl px-4 pt-4 pb-32">{children}</main>;
+/** Page body. `wide` pages use the extra width on desktop for side panels. */
+export function Page({ children, wide }: { children: ReactNode; wide?: boolean }) {
+  return <main className={cx("mx-auto w-full px-4 pt-4 pb-32 md:pb-12", wide ? "max-w-6xl" : "max-w-2xl")}>{children}</main>;
 }
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {

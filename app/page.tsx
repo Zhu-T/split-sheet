@@ -2,11 +2,13 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { CountUp } from "@/components/count-up";
 import { PageMotion } from "@/components/motion";
+import { PeoplePanel } from "@/components/people-panel";
 import { Card, Initials, Money, Page, Skeleton, TopBar } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
 import { isCurrency, type Currency } from "@/lib/currencies";
 import { getRates } from "@/lib/fx";
 import { convert } from "@/lib/money";
+import { summarisePeople } from "@/lib/people";
 import { loadMyGroups } from "@/lib/queries";
 import { NewGroupButton } from "./new-group-button";
 
@@ -14,6 +16,7 @@ export default function DashboardPage() {
   return (
     <>
       <TopBar
+        wide
         title="Split"
         action={
           <Link href="/settings" transitionTypes={["nav-forward"]} aria-label="Settings" className="-mr-2 grid size-11 place-items-center rounded-full text-muted transition active:scale-90">
@@ -24,7 +27,7 @@ export default function DashboardPage() {
           </Link>
         }
       />
-      <Page>
+      <Page wide>
         <PageMotion fallback={<Skeleton />}>
           <Dashboard />
         </PageMotion>
@@ -40,8 +43,9 @@ async function Dashboard() {
 
   // Overall total in the home currency at today's rates; null if rates are unavailable.
   let total: number | null = 0;
+  let rates: Partial<Record<Currency, number>> = {};
   try {
-    const rates = groups.some((g) => g.base !== home) ? await getRates(home) : {};
+    if (groups.some((g) => g.base !== home)) rates = await getRates(home);
     for (const g of groups) {
       const rate = g.base === home ? 1 : rates[g.base];
       if (!rate) throw new Error("missing rate");
@@ -51,9 +55,11 @@ async function Dashboard() {
     total = null;
   }
 
+  const people = summarisePeople(groups.flatMap((g) => g.debts), home, rates);
+
   if (groups.length === 0) {
     return (
-      <Card className="rise px-5 py-8 text-center">
+      <Card className="rise mx-auto max-w-xl px-5 py-8 text-center">
         <h2 className="text-xl font-semibold">Welcome, {user.name.split(" ")[0]}</h2>
         <p className="mt-2 text-muted">Create a group, or open an invite link a friend sent you.</p>
         <div className="mt-6">
@@ -64,31 +70,33 @@ async function Dashboard() {
   }
 
   return (
-    <>
-      <Card className="rise px-5 py-5">
-        <p className="text-sm text-muted">Overall</p>
-        {total === null ? (
-          <p className="mt-1 text-muted">Exchange rates are unavailable right now.</p>
-        ) : (
-          <p className="mt-1 text-3xl font-semibold tracking-tight">
-            {total === 0 ? (
-              "All settled up"
-            ) : (
-              <>
-                <span className="text-lg font-medium text-muted">{total > 0 ? "You're owed " : "You owe "}</span>
-                <CountUp minor={total} currency={home} signed />
-              </>
-            )}
-          </p>
-        )}
-        {total !== null && groups.some((g) => g.base !== home) && (
-          <p className="mt-1 text-xs text-muted">Approximate, converted to {home} at today&apos;s rates.</p>
-        )}
-      </Card>
+    // Desktop: groups on the left, people on the right. Phones: one column, people last.
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div>
+        <Card className="rise px-5 py-5">
+          <p className="text-sm text-muted">Overall</p>
+          {total === null ? (
+            <p className="mt-1 text-muted">Exchange rates are unavailable right now.</p>
+          ) : (
+            <p className="mt-1 text-3xl font-semibold tracking-tight">
+              {total === 0 ? (
+                "All settled up"
+              ) : (
+                <>
+                  <span className="text-lg font-medium text-muted">{total > 0 ? "You're owed " : "You owe "}</span>
+                  <CountUp minor={total} currency={home} signed />
+                </>
+              )}
+            </p>
+          )}
+          {total !== null && groups.some((g) => g.base !== home) && (
+            <p className="mt-1 text-xs text-muted">Approximate, converted to {home} at today&apos;s rates.</p>
+          )}
+        </Card>
 
-      <div className="mt-6 mb-2 flex items-center justify-between px-1">
-        <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">Groups</h2>
-        <NewGroupButton homeCurrency={home} variant="secondary" />
+        <div className="mt-6 mb-2 flex items-center justify-between px-1">
+          <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">Groups</h2>
+          <NewGroupButton homeCurrency={home} variant="secondary" />
       </div>
       <Card>
         <ul className="divide-y divide-line">
@@ -119,6 +127,11 @@ async function Dashboard() {
           ))}
         </ul>
       </Card>
-    </>
+      </div>
+
+      <aside className="lg:sticky lg:top-18">
+        <PeoplePanel people={people} home={home} />
+      </aside>
+    </div>
   );
 }

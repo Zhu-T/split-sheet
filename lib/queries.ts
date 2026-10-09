@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { computeBalances, type LedgerEntry } from "./balances";
 import { isCurrency, type Currency } from "./currencies";
+import { myDebts, type Counterpart } from "./people";
 import { simplifyDebts } from "./simplify";
 
 export type GroupMemberRow = Awaited<ReturnType<typeof loadMembers>>[number];
@@ -77,8 +78,31 @@ export async function loadMyGroups(userId: string) {
   return Promise.all(
     rows.map(async ({ group, memberId }) => {
       const base = asCurrency(group.baseCurrency);
-      const { balances } = balancesFor(await loadExpenses(group.id), base);
-      return { id: group.id, name: group.name, base, net: balances.get(memberId) ?? 0 };
+      const [expenses, members] = await Promise.all([loadExpenses(group.id), loadMembers(group.id)]);
+      const { balances, transfers } = balancesFor(expenses, base);
+      const byId = new Map(members.map((m) => [m.id, m]));
+      // Claimed members are keyed by user so the same friend merges across groups.
+      const counterpartOf = (id: string): Counterpart => {
+        const m = byId.get(id);
+        return m?.userId ? { key: `u:${m.userId}`, name: m.displayName } : { key: `m:${id}`, name: m?.displayName ?? "Someone" };
+      };
+      return {
+        id: group.id,
+        name: group.name,
+        base,
+        net: balances.get(memberId) ?? 0,
+        debts: myDebts(transfers, memberId, counterpartOf, { id: group.id, name: group.name, currency: base }),
+      };
     }),
   );
+}
+
+/** Names of a user's groups, for the group page's sidebar (no balances, so it's cheap). */
+export function loadGroupNav(userId: string) {
+  return db
+    .select({ id: schema.groups.id, name: schema.groups.name })
+    .from(schema.members)
+    .innerJoin(schema.groups, eq(schema.groups.id, schema.members.groupId))
+    .where(and(eq(schema.members.userId, userId), eq(schema.members.active, true)))
+    .orderBy(desc(schema.groups.createdAt));
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { CountUp } from "@/components/count-up";
-import { Button, Card, Money, SectionTitle, cx, inputClass } from "@/components/ui";
+import { Button, Card, Initials, Money, SectionTitle, cx, inputClass } from "@/components/ui";
 import type { Currency } from "@/lib/currencies";
 import { convert } from "@/lib/money";
 import type { Transfer } from "@/lib/simplify";
@@ -43,7 +43,7 @@ type SettleDraft = { from: string; to: string; amountMinor: number };
 type ExpenseSheetState = { open: boolean; expense: ExpenseView | null; key: number };
 type SettleSheetState = { open: boolean; draft: SettleDraft | null; existing: ExpenseView | null; key: number };
 
-export function GroupScreen({ data }: { data: GroupData }) {
+export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode }) {
   // Sheets stay mounted while closing so they can animate out; `key` resets their form on each open.
   const [expenseSheet, setExpenseSheet] = useState<ExpenseSheetState>({ open: false, expense: null, key: 0 });
   const [settleSheet, setSettleSheet] = useState<SettleSheetState>({ open: false, draft: null, existing: null, key: 0 });
@@ -61,7 +61,7 @@ export function GroupScreen({ data }: { data: GroupData }) {
     if (e?.kind === "settlement") setSettleSheet((s) => ({ open: true, draft: null, existing: e, key: s.key + 1 }));
     else setExpenseSheet((s) => ({ open: true, expense: e, key: s.key + 1 }));
   };
-  const openSettle = (t: SettleDraft) => setSettleSheet((s) => ({ open: true, draft: t, existing: null, key: s.key + 1 }));
+  const openSettle = (t: SettleDraft | null) => setSettleSheet((s) => ({ open: true, draft: t, existing: null, key: s.key + 1 }));
   const done = (text?: string) => {
     setExpenseSheet((s) => ({ ...s, open: false }));
     setSettleSheet((s) => ({ ...s, open: false }));
@@ -94,56 +94,74 @@ export function GroupScreen({ data }: { data: GroupData }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  return (
-    <>
-      {justCreated && data.expenses.length === 0 && (
-        <Card className="rise mb-4 px-4 py-3 text-sm">
-          Group created. Invite people from <span className="font-semibold">Members</span> (top right), or add an expense.
-        </Card>
-      )}
+  const panel = <GroupPanel data={data} nameOf={nameOf} others={others} onSettle={openSettle} />;
 
-      {/* Hierarchy: the one number that matters comes first and largest. */}
-      <Card className="rise px-5 py-5">
-        <p className="text-sm text-muted">Your balance</p>
-        <p className="mt-1 text-3xl font-semibold tracking-tight">
-          {myNet === 0 ? (
-            "All settled up"
-          ) : (
-            <>
-              <span className="text-lg font-medium text-muted">{myNet > 0 ? "You're owed " : "You owe "}</span>
-              <CountUp minor={myNet} currency={data.base} signed />
-            </>
-          )}
-        </p>
-        {mine.length > 0 && (
-          <ul className="mt-4 space-y-2">
-            {mine.map((t) => (
-              <TransferRow key={t.from + t.to} t={t} base={data.base} nameOf={nameOf} onSettle={() => openSettle(t)} />
-            ))}
-          </ul>
+  return (
+    // Phones: one column. Tablets: activity + balances panel. Desktop: groups nav on the left too.
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[200px_minmax(0,1fr)_300px] md:items-start">
+      {nav && <nav aria-label="Your groups" className="hidden lg:sticky lg:top-18 lg:block">{nav}</nav>}
+
+      <div className="min-w-0">
+        {justCreated && data.expenses.length === 0 && (
+          <Card className="rise mb-4 px-4 py-3 text-sm">
+            Group created. Invite people from <span className="font-semibold">Members</span> (top right), or add an expense.
+          </Card>
         )}
-        {/* Progressive disclosure: other people's debts are one tap away, not in the way. */}
-        {others.length > 0 && (
-          <details className="group mt-3">
+
+        {/* Hierarchy: the one number that matters comes first and largest. */}
+        <Card className="rise px-5 py-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-muted">Your balance</p>
+              <p className="mt-1 text-3xl font-semibold tracking-tight">
+                {myNet === 0 ? (
+                  "All settled up"
+                ) : (
+                  <>
+                    <span className="text-lg font-medium text-muted">{myNet > 0 ? "You're owed " : "You owe "}</span>
+                    <CountUp minor={myNet} currency={data.base} signed />
+                  </>
+                )}
+              </p>
+            </div>
+            {/* Wider screens: primary actions sit with the balance instead of floating. */}
+            <div className="hidden gap-2 md:flex">
+              <Button variant="secondary" onClick={() => openSettle(mine[0] ?? null)}>
+                Settle up
+              </Button>
+              <Button onClick={() => openEntry(null)} aria-keyshortcuts="n" title="Add expense (N)">
+                Add expense
+              </Button>
+            </div>
+          </div>
+          {mine.length > 0 && (
+            <ul className="mt-4 space-y-2">
+              {mine.map((t) => (
+                <TransferRow key={t.from + t.to} t={t} base={data.base} nameOf={nameOf} onSettle={() => openSettle(t)} />
+              ))}
+            </ul>
+          )}
+          {/* Progressive disclosure on phones: everyone's balances are one tap away. */}
+          <details className="group mt-3 md:hidden">
             <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-medium text-accent">
               <svg viewBox="0 0 24 24" className="size-4 transition-transform duration-200 group-open:rotate-90" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M9 6l6 6-6 6" />
               </svg>
-              Everyone else ({others.length})
+              Group balances &amp; spending
             </summary>
-            <ul className="mt-1 space-y-2">
-              {others.map((t, i) => (
-                <TransferRow key={t.from + t.to} index={i} t={t} base={data.base} nameOf={nameOf} onSettle={() => openSettle(t)} />
-              ))}
-            </ul>
+            <div className="mt-2 space-y-4">{panel}</div>
           </details>
-        )}
-      </Card>
+        </Card>
 
-      <SectionTitle>Activity</SectionTitle>
-      <Activity data={data} nameOf={nameOf} onOpen={openEntry} />
+        <SectionTitle>Activity</SectionTitle>
+        <Activity data={data} nameOf={nameOf} onOpen={openEntry} />
+      </div>
 
-      <div className="bottom-safe pointer-events-none fixed inset-x-0 z-10 mx-auto flex max-w-2xl flex-col items-end gap-3 px-4">
+      <aside aria-label="Group balances" className="hidden space-y-4 md:sticky md:top-18 md:block">
+        {panel}
+      </aside>
+
+      <div className="bottom-safe pointer-events-none fixed inset-x-0 z-10 mx-auto flex max-w-6xl flex-col items-end gap-3 px-4">
         <div role="status" aria-live="polite" className="w-full">
           {toast && (
             <p key={toast.id} className="toast mx-auto w-fit rounded-full bg-text px-4 py-2.5 text-sm font-medium text-bg shadow-lg">
@@ -152,7 +170,7 @@ export function GroupScreen({ data }: { data: GroupData }) {
           )}
         </div>
         <Button
-          className="pointer-events-auto h-14 rounded-full px-6 shadow-lg"
+          className="pointer-events-auto h-14 rounded-full px-6 shadow-lg md:hidden"
           onClick={() => openEntry(null)}
           aria-keyshortcuts="n"
           title="Add expense (N)"
@@ -181,6 +199,103 @@ export function GroupScreen({ data }: { data: GroupData }) {
         onClose={() => done()}
         onDone={done}
       />
+    </div>
+  );
+}
+
+/** Every member's balance, suggested payments between others, and spending totals. */
+function GroupPanel({
+  data,
+  nameOf,
+  others,
+  onSettle,
+}: {
+  data: GroupData;
+  nameOf: (id: string) => string;
+  others: Transfer[];
+  onSettle: (t: SettleDraft) => void;
+}) {
+  const me = data.myMemberId;
+  // Me first, then whoever is furthest from settled.
+  const rows = data.members
+    .map((m) => ({ ...m, net: data.balances[m.id] ?? 0 }))
+    .filter((m) => m.active || m.net !== 0)
+    .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : Math.abs(b.net) - Math.abs(a.net) || a.name.localeCompare(b.name)));
+
+  const stats = useMemo(() => {
+    let total = 0;
+    let paid = 0;
+    let share = 0;
+    let count = 0;
+    for (const e of data.expenses) {
+      if (e.kind !== "expense") continue;
+      count += 1;
+      const inBase = convert(e.amountMinor, e.currency, data.base, e.fxRate);
+      total += inBase;
+      if (e.payerId === me) paid += inBase;
+      const mine = e.splits.find((s) => s.memberId === me)?.shareMinor ?? 0;
+      share += convert(mine, e.currency, data.base, e.fxRate);
+    }
+    return { total, paid, share, count };
+  }, [data.expenses, data.base, me]);
+
+  return (
+    <>
+      <Card className="overflow-hidden">
+        <h2 className="border-b border-line px-4 py-3 text-xs font-semibold tracking-wide text-muted uppercase">Group balances</h2>
+        <ul className="divide-y divide-line">
+          {rows.map((m, i) => (
+            <li key={m.id} className="rise flex items-center gap-3 px-4 py-2.5" style={{ "--i": i } as CSSProperties}>
+              <Initials name={m.name} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-medium">{m.id === me ? "You" : m.name}</p>
+                <p className={cx("text-sm", m.net > 0 ? "text-owed" : m.net < 0 ? "text-owe" : "text-muted")}>
+                  {m.net === 0 ? (
+                    "settled up"
+                  ) : (
+                    <>
+                      {m.net > 0 ? (m.id === me ? "get back " : "gets back ") : m.id === me ? "owe " : "owes "}
+                      <Money minor={Math.abs(m.net)} currency={data.base} className="font-semibold" />
+                    </>
+                  )}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      {others.length > 0 && (
+        <Card className="overflow-hidden">
+          <h2 className="border-b border-line px-4 py-3 text-xs font-semibold tracking-wide text-muted uppercase">
+            Suggested payments
+          </h2>
+          <ul className="space-y-2 px-4 py-3">
+            {others.map((t, i) => (
+              <TransferRow key={t.from + t.to} index={i} t={t} base={data.base} nameOf={nameOf} onSettle={() => onSettle(t)} />
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <Card className="overflow-hidden">
+        <h2 className="border-b border-line px-4 py-3 text-xs font-semibold tracking-wide text-muted uppercase">Spending</h2>
+        <dl className="grid grid-cols-2 gap-px bg-line">
+          {[
+            ["Group total", stats.total],
+            ["Expenses", null],
+            ["You paid", stats.paid],
+            ["Your share", stats.share],
+          ].map(([label, value]) => (
+            <div key={label as string} className="bg-surface px-4 py-3">
+              <dt className="text-xs text-muted">{label}</dt>
+              <dd className="mt-0.5 font-semibold">
+                {value === null ? <span className="tabular-nums">{stats.count}</span> : <Money minor={value as number} currency={data.base} />}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
     </>
   );
 }
