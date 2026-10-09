@@ -71,6 +71,24 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # Fail fast with a clear message instead of a confusing tool error. Never prints values.
+      - name: Check required secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          missing=0
+          for name in DATABASE_URL VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!name}" ]; then echo "::error::Missing repository secret: $name"; missing=1; fi
+          done
+          if [ -n "$DATABASE_URL" ] && ! [[ "$DATABASE_URL" =~ ^postgres(ql)?:// ]]; then
+            echo "::error::DATABASE_URL must start with postgresql:// (no quotes, 'psql', or 'DATABASE_URL=' prefix). It starts with: '${DATABASE_URL:0:12}'"
+            missing=1
+          fi
+          if [ "$DATABASE_URL" != "$(printf '%s' "$DATABASE_URL" | tr -d '[:space:]')" ]; then
+            echo "::error::DATABASE_URL contains spaces or line breaks"; missing=1
+          fi
+          exit $missing
       - run: npm ci
       # Migrations run before the new code goes live, so the schema is always ready for it.
       - name: Run database migrations
