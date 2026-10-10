@@ -333,7 +333,7 @@ function SplitTypeControl({ value, onChange }: { value: SplitType; onChange: (t:
     <div role="radiogroup" aria-label="Split type" className="relative grid grid-cols-3 rounded-xl bg-surface-2 p-1">
       <span
         aria-hidden
-        className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-lg bg-surface shadow-sm transition-transform duration-300 ease-out"
+        className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-lg bg-raised shadow-sm transition-transform duration-300 ease-out"
         style={{ transform: `translateX(${index * 100}%)` }}
       />
       {types.map((t) => (

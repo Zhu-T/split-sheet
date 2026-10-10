@@ -4,6 +4,7 @@ import { CurrencySelect } from "@/components/currency-select";
 import { PageMotion } from "@/components/motion";
 import { Button, Card, Field, Page, SectionTitle, Skeleton, TopBar } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
+import { ThemeSegmented } from "@/components/theme-toggle";
 import { DeleteAccountButton } from "./delete-account-button";
 import { NameForm } from "./name-form";
 import { VenmoForm } from "./venmo-form";
@@ -30,6 +31,11 @@ async function Settings() {
       <SectionTitle>Profile</SectionTitle>
       <Card className="p-4">
         <NameForm current={user.name} />
+      </Card>
+
+      <SectionTitle>Appearance</SectionTitle>
+      <Card className="p-4">
+        <ThemeSegmented />
       </Card>
 
       <SectionTitle>Account</SectionTitle>

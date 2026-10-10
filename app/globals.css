@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
+/* Light theme. The theme is chosen in the app (default dark), not by the device: <html> carries
+   data-theme="light" | "dark", set before first paint by the script in app/layout.tsx. */
 :root {
+  color-scheme: light;
   --bg: #f6f5f2;
   --surface: #ffffff;
   --surface-2: #efede8;
+  --raised: #ffffff; /* the selected pill in segmented controls: lifted above surface-2 */
   --line: #e2dfd8;
   --text: #1b1a17;
   --muted: #6b675f;
@@ -22,28 +26,36 @@
   --duration-move: 380ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141412;
-    --surface: #1d1c1a;
-    --surface-2: #262522;
-    --line: #34322e;
-    --text: #efede8;
-    --muted: #a19c92;
-    --accent: #4fb89a;
-    --accent-ink: #0d1f1a;
-    --owed: #5cc98f;
-    --owe: #ef8a74;
-    --danger: #ef8a74;
-    --danger-ink: #2a0f09;
-    --focus: #7fd3ba;
-  }
+/* Dark theme (the default). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #141412;
+  --surface: #1d1c1a;
+  --surface-2: #262522;
+  --raised: #3a3834;
+  --line: #34322e;
+  --text: #efede8;
+  --muted: #a19c92;
+  --accent: #4fb89a;
+  --accent-ink: #0d1f1a;
+  --owed: #5cc98f;
+  --owe: #ef8a74;
+  --danger: #ef8a74;
+  --danger-ink: #2a0f09;
+  --focus: #7fd3ba;
+}
+
+/* Theme switches cross-fade (View Transitions), unless reduced motion is on (handled below). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 250ms;
 }
 
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-raised: var(--raised);
   --color-line: var(--line);
   --color-text: var(--text);
   --color-muted: var(--muted);

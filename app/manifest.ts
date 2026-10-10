@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Split shared expenses with friends.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f6f5f2",
+    background_color: "#141412", // dark is the default theme
     theme_color: "#1f6f5c",
     icons: [
       { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },

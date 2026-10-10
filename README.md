@@ -12,7 +12,7 @@ A small Splitwise-style app for splitting shared expenses in groups. It runs on 
 - Discord summaries: a group owner connects a channel webhook; the group's invite link is posted there when a new webhook is connected, and "Send test message" checks it any time. With **Notifications** on, at most one summary a day is posted automatically (Vercel Cron, only if something changed), or the owner can post one now. Groups can have **trip dates**: automatic summaries wait until the trip ends, then a whole-trip wrap-up is posted. Summaries list new expenses and payments, then who owes whom, @mentioning people who owe.
 - A dashboard across all your groups, converted to your home currency.
 - CSV export and "Delete my account".
-- Designed for phones first, and can be installed to the home screen.
+- Designed for phones first, and can be installed to the home screen. Light and dark themes (dark by default), switchable from the dashboard or Settings → Appearance and remembered per browser.
 
 ## Stack
 
