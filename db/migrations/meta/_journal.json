@@ -15,6 +15,13 @@
       "when": 1791604377010,
       "tag": "0001_venmo_username",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791604690374,
+      "tag": "0002_remove_shares_split",
+      "breakpoints": true
     }
   ]
 }

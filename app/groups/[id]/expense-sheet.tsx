@@ -10,7 +10,7 @@ import { convert, formatMoney, parseAmount, toDecimalString } from "@/lib/money"
 import { computeShares, type SplitType } from "@/lib/split";
 import type { ExpenseView, GroupData } from "./group-screen";
 
-const SPLIT_LABELS: Record<SplitType, string> = { equal: "Equally", exact: "Amounts", percent: "Percent", shares: "Shares" };
+const SPLIT_LABELS: Record<SplitType, string> = { equal: "Equally", exact: "Amounts", percent: "Percent" };
 
 const today = () => {
   const d = new Date();
@@ -69,7 +69,7 @@ export function ExpenseSheet({
           ? 1
           : splitType === "exact"
             ? (parseAmount(raw || "0", currency) ?? NaN)
-            : Number(raw || (splitType === "shares" ? "1" : "0")); // an empty share box means 1 share
+            : Number(raw || "0");
       return { memberId, value };
     });
     const entered = inputs.reduce((acc, i) => acc + (Number.isFinite(i.value) ? i.value : 0), 0);
@@ -223,10 +223,10 @@ export function ExpenseSheet({
                   {on && splitType !== "equal" && (
                     <input
                       aria-label={`${m.name} ${SPLIT_LABELS[splitType]}`}
-                      inputMode={splitType === "shares" ? "numeric" : "decimal"}
+                      inputMode="decimal"
                       value={values[m.id] ?? ""}
                       onChange={(e) => setValues((v) => ({ ...v, [m.id]: e.target.value }))}
-                      placeholder={splitType === "shares" ? "1" : "0"}
+                      placeholder="0"
                       className="h-10 w-20 rounded-lg border border-line bg-surface px-2 text-right text-base tabular-nums outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/20"
                     />
                   )}
@@ -316,10 +316,10 @@ function SplitTypeControl({ value, onChange }: { value: SplitType; onChange: (t:
   const types = Object.keys(SPLIT_LABELS) as SplitType[];
   const index = types.indexOf(value);
   return (
-    <div role="radiogroup" aria-label="Split type" className="relative grid grid-cols-4 rounded-xl bg-surface-2 p-1">
+    <div role="radiogroup" aria-label="Split type" className="relative grid grid-cols-3 rounded-xl bg-surface-2 p-1">
       <span
         aria-hidden
-        className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/4)] rounded-lg bg-surface shadow-sm transition-transform duration-300 ease-out"
+        className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-lg bg-surface shadow-sm transition-transform duration-300 ease-out"
         style={{ transform: `translateX(${index * 100}%)` }}
       />
       {types.map((t) => (

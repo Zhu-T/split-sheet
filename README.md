@@ -6,7 +6,7 @@ A small Splitwise-style app for splitting shared expenses in groups. It runs on 
 
 - Groups with invite links. Only the owner can make a new link, which stops the old one working.
 - Add people by name before they join. If you include their email, they take over that spot when they sign in through the invite link.
-- Split equally, by exact amounts, by percentage or by shares, in 30 currencies. Exchange rates come from the ECB via Frankfurter and can be edited per expense.
+- Split equally, by exact amounts or by percentage, in 30 currencies. Exchange rates come from the ECB via Frankfurter and can be edited per expense.
 - Balances, suggested settle-ups and recorded payments.
 - Pay with Venmo from the settle-up screen when the person you owe has added their Venmo username. Venmo has no public API, so this opens a pre-filled payment in the Venmo app (or website), and you record the payment yourself once it's sent. USD only.
 - A dashboard across all your groups, converted to your home currency.

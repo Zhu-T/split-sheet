@@ -15,7 +15,7 @@ import {
 
 export const roleEnum = pgEnum("member_role", ["owner", "member"]);
 export const kindEnum = pgEnum("expense_kind", ["expense", "settlement"]);
-export const splitTypeEnum = pgEnum("split_type", ["equal", "exact", "percent", "shares"]);
+export const splitTypeEnum = pgEnum("split_type", ["equal", "exact", "percent"]);
 
 const money = (name: string) => bigint(name, { mode: "number" });
 

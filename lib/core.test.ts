@@ -47,16 +47,16 @@ describe("computeShares", () => {
     expect(r.ok && sum(r.shares)).toBe(1001);
     expect(computeShares(1000, "percent", [{ memberId: "a", value: 50 }, { memberId: "b", value: 40 }]).ok).toBe(false);
   });
-  it("splits by shares and drops zero-share people", () => {
-    const r = computeShares(900, "shares", [{ memberId: "a", value: 2 }, { memberId: "b", value: 1 }, { memberId: "c", value: 0 }]);
-    expect(r).toEqual({ ok: true, shares: [{ memberId: "a", shareMinor: 600 }, { memberId: "b", shareMinor: 300 }] });
+  it("drops people whose share is zero", () => {
+    const r = computeShares(900, "percent", [{ memberId: "a", value: 75 }, { memberId: "b", value: 25 }, { memberId: "c", value: 0 }]);
+    expect(r).toEqual({ ok: true, shares: [{ memberId: "a", shareMinor: 675 }, { memberId: "b", shareMinor: 225 }] });
   });
   it("rejects invalid input", () => {
     expect(computeShares(0, "equal", [{ memberId: "a", value: 0 }]).ok).toBe(false);
     expect(computeShares(100, "equal", []).ok).toBe(false);
     expect(computeShares(100, "equal", [{ memberId: "a", value: 0 }, { memberId: "a", value: 0 }]).ok).toBe(false);
-    expect(computeShares(100, "shares", [{ memberId: "a", value: -1 }, { memberId: "b", value: 2 }]).ok).toBe(false);
-    expect(computeShares(100, "shares", [{ memberId: "a", value: 0 }]).ok).toBe(false);
+    expect(computeShares(100, "percent", [{ memberId: "a", value: -1 }, { memberId: "b", value: 101 }]).ok).toBe(false);
+    expect(computeShares(100, "exact", [{ memberId: "a", value: 0 }]).ok).toBe(false);
   });
   it("always allocates the full total", () => {
     for (let total = 1; total < 500; total += 7) {

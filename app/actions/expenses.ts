@@ -40,8 +40,7 @@ function toSplitInputs(type: SplitType, raw: { memberId: string; value: string }
       inputs.push({ memberId, value: 1 });
       continue;
     }
-    // Matches the form: an empty share box means 1 share, any other empty box means 0.
-    const n = type === "exact" ? parseAmount(value || "0", currency) : Number(value || (type === "shares" ? "1" : "0"));
+    const n = type === "exact" ? parseAmount(value || "0", currency) : Number(value || "0");
     if (n === null || !Number.isFinite(n) || n < 0 || n > 1e9) return null;
     inputs.push({ memberId, value: n });
   }

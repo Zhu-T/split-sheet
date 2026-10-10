@@ -1,8 +1,8 @@
-export type SplitType = "equal" | "exact" | "percent" | "shares";
+export type SplitType = "equal" | "exact" | "percent";
 
-export const SPLIT_TYPES: SplitType[] = ["equal", "exact", "percent", "shares"];
+export const SPLIT_TYPES: SplitType[] = ["equal", "exact", "percent"];
 
-/** `value` is ignored for equal, minor units for exact, a percentage for percent, a weight for shares. */
+/** `value` is ignored for equal, minor units for exact, a percentage for percent. */
 export type SplitInput = { memberId: string; value: number };
 
 export type Share = { memberId: string; shareMinor: number };
@@ -70,12 +70,6 @@ export function computeShares(totalMinor: number, type: SplitType, inputs: Split
       if (Math.abs(sum - 100) > 1e-9) {
         return { ok: false, error: `Percentages add up to ${+sum.toFixed(4)}%, not 100%` };
       }
-      shares = allocate(totalMinor, inputs.map((i) => ({ memberId: i.memberId, weight: i.value })));
-      break;
-    }
-    case "shares": {
-      const sum = inputs.reduce((acc, i) => acc + i.value, 0);
-      if (sum <= 0) return { ok: false, error: "Give at least one person a share" };
       shares = allocate(totalMinor, inputs.map((i) => ({ memberId: i.memberId, weight: i.value })));
       break;
     }
