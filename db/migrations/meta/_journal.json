@@ -64,6 +64,13 @@
       "when": 1791608811487,
       "tag": "0008_payment_confirmation",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791646387916,
+      "tag": "0009_history_archive",
+      "breakpoints": true
     }
   ]
 }

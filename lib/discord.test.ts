@@ -25,6 +25,9 @@ describe("trip schedule", () => {
     expect(automaticPostPlan(end, new Date("2026-10-05T12:00:00Z"), new Date("2026-10-09T01:00:00Z"))).toBe("wrap-up");
     expect(automaticPostPlan(end, new Date("2026-10-09T01:00:00Z"), new Date("2026-10-10T01:00:00Z"))).toBe("daily");
     expect(automaticPostPlan(null, null, new Date())).toBe("daily");
+    // Automatic posts stop 20 days after the trip ends.
+    expect(automaticPostPlan(end, new Date("2026-10-27T01:00:00Z"), new Date("2026-10-28T01:00:00Z"))).toBe("daily"); // 19 days
+    expect(automaticPostPlan(end, new Date("2026-10-27T01:00:00Z"), new Date("2026-10-29T00:01:00Z"))).toBe("stopped");
   });
 });
 

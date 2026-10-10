@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { deleteExpense, saveExpense } from "@/app/actions/expenses";
 import { DateField } from "@/components/calendar";
+import { HistorySection } from "@/components/history-section";
 import { useConfirm } from "@/components/confirm";
 import { Sheet } from "@/components/sheet";
 import { Button, ErrorText, Field, inputClass } from "@/components/ui";
@@ -24,7 +25,7 @@ export function SettleSheet({
   existing: ExpenseView | null;
   data: GroupData;
   onClose: () => void;
-  onDone: (message: string) => void;
+  onDone: (message: string, undoId?: string) => void;
 }) {
   const active = data.members.filter((m) => m.active);
   const [from, setFrom] = useState(existing?.payerId ?? draft?.from ?? data.myMemberId);
@@ -75,7 +76,7 @@ export function SettleSheet({
     startTransition(async () => {
       const result = await deleteExpense(data.groupId, existing.id);
       if (result.error) setError(result.error);
-      else onDone("Payment deleted");
+      else onDone("Payment deleted", result.deletedId);
     });
   }
 
@@ -157,6 +158,7 @@ export function SettleSheet({
               </Button>
             </div>
           )}
+          {existing && <HistorySection groupId={data.groupId} expenseId={existing.id} />}
         </form>
       </Sheet>
     </>

@@ -10,6 +10,7 @@ import {
   rotateInvite,
   sendTestDiscordMessage,
   setDiscordAutoDigest,
+  setArchived,
   setDiscordWebhook,
   setRequirePaymentConfirmation,
   setMemberActive,
@@ -17,9 +18,11 @@ import {
   updateMember,
   type WebhookFormState,
 } from "@/app/actions/groups";
+import { restoreExpense } from "@/app/actions/expenses";
 import { useConfirm } from "@/components/confirm";
 import { CurrencySelect } from "@/components/currency-select";
 import { DateRangeField } from "@/components/date-range";
+import { ARCHIVE_AFTER_DAYS } from "@/lib/rules";
 import { Sheet } from "@/components/sheet";
 import { Button, Card, ErrorText, Field, Initials, cx, inputClass } from "@/components/ui";
 
@@ -275,6 +278,7 @@ export function DiscordCard({
   autoDigest,
   nextPostAt,
   pausedUntil,
+  automaticEnded = false,
 }: {
   groupId: string;
   connected: boolean;
@@ -285,6 +289,8 @@ export function DiscordCard({
   nextPostAt: string | null;
   /** The trip's end date while the trip is still in progress (automatic posts wait for it). */
   pausedUntil: string | null;
+  /** Automatic posts are over: the trip is archived or ended more than 20 days ago. */
+  automaticEnded?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(setDiscordWebhook.bind(null, groupId), {} as WebhookFormState);
   const [busy, startTransition] = useTransition();
@@ -321,7 +327,9 @@ export function DiscordCard({
           <span>
             <span className="block text-[15px] font-medium">Notifications</span>
             <span className="block text-sm text-muted">
-              {!autoDigest
+              {automaticEnded
+                ? `Automatic summaries have ended (the trip is archived or ended over ${ARCHIVE_AFTER_DAYS} days ago). You can still post one manually.`
+                : !autoDigest
                 ? "Off. Turn on to post a summary automatically."
                 : pausedUntil
                   ? `Paused until the trip ends on ${formatDay(pausedUntil)}, then a trip wrap-up is posted.`
@@ -511,6 +519,124 @@ export function PaymentsCard({ groupId, requireConfirmation, isOwner }: { groupI
           </span>
         </button>
       </label>
+    </Card>
+  );
+}
+
+/** Owner: archive (expenses read-only, Discord posts stop) or unarchive. Trips also archive by
+ * themselves 20 days after they end. */
+export function ArchiveCard({
+  groupId,
+  archived,
+  isOwner,
+  autoArchiveOn,
+  tripEnd,
+}: {
+  groupId: string;
+  archived: boolean;
+  isOwner: boolean;
+  autoArchiveOn: boolean;
+  tripEnd: string | null;
+}) {
+  const [busy, startTransition] = useTransition();
+  const [confirm, confirmDialog] = useConfirm();
+  const auto =
+    tripEnd && autoArchiveOn && !archived ? `It archives itself ${ARCHIVE_AFTER_DAYS} days after the trip ends (${formatDay(tripEnd)}).` : "";
+  const status = archived
+    ? "Archived: expenses are read-only, payments still work, and Discord summaries have stopped."
+    : `Archiving makes expenses read-only (payments still work) and stops Discord summaries. ${auto}`;
+
+  return (
+    <Card className="p-4">
+      <p className="text-sm text-muted">{status}</p>
+      {isOwner ? (
+        <Button
+          variant="secondary"
+          className="mt-3"
+          disabled={busy}
+          onClick={async () => {
+            if (archived) return startTransition(() => setArchived(groupId, false));
+            const ok = await confirm({
+              title: "Archive this trip?",
+              message: "Expenses become read-only and Discord summaries stop. People can still record payments, and you can unarchive any time.",
+              confirmLabel: "Archive trip",
+            });
+            if (ok) startTransition(() => setArchived(groupId, true));
+          }}
+        >
+          {archived ? "Unarchive" : "Archive trip"}
+        </Button>
+      ) : (
+        <p className="mt-2 text-sm text-muted">Only the group owner can change this.</p>
+      )}
+      {confirmDialog}
+    </Card>
+  );
+}
+
+type DeletedItem = { id: string; kind: "expense" | "settlement"; description: string; amountLabel: string; deletedAt: string; deletedBy: string };
+
+/** Anything deleted in the last 30 days, with Restore. */
+export function RecentlyDeletedCard({ groupId, items, archived }: { groupId: string; items: DeletedItem[]; archived: boolean }) {
+  const [busy, startTransition] = useTransition();
+  const [error, setError] = useState<string>();
+  if (items.length === 0) {
+    return (
+      <Card className="p-4">
+        <p className="text-sm text-muted">Nothing deleted in the last 30 days.</p>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <details className="group">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-sm font-medium">
+          <svg viewBox="0 0 24 24" className="size-4 text-muted transition-transform duration-200 group-open:rotate-90" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+          {items.length} deleted in the last 30 days
+        </summary>
+        <ul className="divide-y divide-line border-t border-line">
+          {items.map((it) => {
+            // On archived trips only payments can come back (expenses are read-only).
+            const restorable = !archived || it.kind === "settlement";
+            return (
+              <li key={it.id} className="flex items-center gap-3 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  {/* Only the description truncates; the amount always stays visible. */}
+                  <p className="flex min-w-0 text-[15px] font-medium">
+                    <span className="truncate">{it.kind === "settlement" ? "Payment" : it.description}</span>
+                    <span className="shrink-0 font-normal whitespace-pre text-muted"> · {it.amountLabel}</span>
+                  </p>
+                  <p className="truncate text-sm text-muted" suppressHydrationWarning>
+                    Deleted by {it.deletedBy} · {new Date(it.deletedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </p>
+                </div>
+                {restorable && (
+                  <Button
+                    variant="secondary"
+                    className="min-h-10 px-3 text-sm"
+                    disabled={busy}
+                    onClick={() =>
+                      startTransition(async () => {
+                        const r = await restoreExpense(groupId, it.id);
+                        setError(r.error);
+                      })
+                    }
+                  >
+                    Restore
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {error && (
+          <div className="px-4 pb-3">
+            <ErrorText>{error}</ErrorText>
+          </div>
+        )}
+      </details>
     </Card>
   );
 }

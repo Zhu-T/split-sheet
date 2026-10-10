@@ -245,6 +245,7 @@ export async function postDiscordSummaryNow(groupId: string): Promise<ActionResu
   const { group } = await requireOwner(groupId);
   // After the trip ends, the first summary is the whole-trip wrap-up.
   const plan = automaticPostPlan(group.tripEnd, group.discordLastPostedAt, new Date());
+  // Manual posts still work after the 20-day cut-off ("stopped" only applies to automatic posts).
   const r = await postGroupDigest(groupId, { skipIfQuiet: false, mode: plan === "wrap-up" ? "wrap-up" : "daily" });
   refresh();
   if (r.posted) return {};
@@ -300,5 +301,18 @@ export async function setRequirePaymentConfirmation(groupId: string, enabled: bo
         .where(and(eq(schema.expenses.groupId, groupId), eq(schema.expenses.kind, "settlement"), isNull(schema.expenses.confirmedAt)));
     }
   });
+  refresh();
+}
+
+/**
+ * Owner: archive (expenses read-only, Discord posts stop) or unarchive a trip. Unarchiving also
+ * turns off auto-archiving, so the daily job doesn't archive it again the next morning.
+ */
+export async function setArchived(groupId: string, archived: boolean): Promise<void> {
+  await requireOwner(groupId);
+  await db
+    .update(schema.groups)
+    .set(archived ? { archivedAt: new Date() } : { archivedAt: null, autoArchive: false })
+    .where(eq(schema.groups.id, groupId));
   refresh();
 }

@@ -3,7 +3,12 @@ import {
   cleanDisplayName,
   findClaimablePlaceholder,
   hasAccess,
+  archiveCutoffDate,
+  canChangeExpense,
+  isPastTrip,
   isPendingPayment,
+  pastArchiveCutoff,
+  shouldAutoArchive,
   membersBelongToGroup,
   paymentConfirmedOnSave,
   safeRedirectPath,
@@ -85,5 +90,32 @@ describe("payment confirmation", () => {
     expect(isPendingPayment({ kind: "settlement", confirmedAt: null })).toBe(true);
     expect(isPendingPayment({ kind: "settlement", confirmedAt: new Date() })).toBe(false);
     expect(isPendingPayment({ kind: "expense", confirmedAt: null })).toBe(false);
+  });
+});
+
+describe("past and archived trips", () => {
+  const end = "2026-10-08";
+  it("lists a trip as past once its last day is over, or when archived", () => {
+    expect(isPastTrip(end, null, new Date("2026-10-08T23:00:00Z"))).toBe(false);
+    expect(isPastTrip(end, null, new Date("2026-10-09T00:00:00Z"))).toBe(true);
+    expect(isPastTrip(null, null, new Date())).toBe(false);
+    expect(isPastTrip("2099-01-01", new Date(), new Date())).toBe(true);
+  });
+  it("auto-archives 20 days after the trip ends, unless the owner unarchived it", () => {
+    const g = { tripEnd: end, archivedAt: null, autoArchive: true };
+    expect(shouldAutoArchive(g, new Date("2026-10-28T23:59:00Z"))).toBe(false); // 19.99 days after
+    expect(shouldAutoArchive(g, new Date("2026-10-29T00:01:00Z"))).toBe(true); // 20 days + 1 min
+    expect(shouldAutoArchive({ ...g, autoArchive: false }, new Date("2026-12-01T00:00:00Z"))).toBe(false);
+    expect(shouldAutoArchive({ ...g, archivedAt: new Date() }, new Date("2026-12-01T00:00:00Z"))).toBe(false);
+    expect(shouldAutoArchive({ ...g, tripEnd: null }, new Date("2026-12-01T00:00:00Z"))).toBe(false);
+    expect(pastArchiveCutoff(end, new Date("2026-10-29T00:01:00Z"))).toBe(true);
+  });
+  it("gives a conservative cut-off date for SQL filters", () => {
+    expect(archiveCutoffDate(new Date("2026-10-29T12:00:00Z"))).toBe("2026-10-08");
+  });
+  it("keeps archived expenses read-only but allows payments", () => {
+    expect(canChangeExpense("expense", new Date())).toBe(false);
+    expect(canChangeExpense("settlement", new Date())).toBe(true);
+    expect(canChangeExpense("expense", null)).toBe(true);
   });
 });

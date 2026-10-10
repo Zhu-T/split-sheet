@@ -1,4 +1,5 @@
 // Discord channel webhooks: URL validation and message formatting (pure, no I/O).
+import { pastArchiveCutoff } from "./rules";
 
 /**
  * Accept only real Discord webhook URLs, so the server never POSTs to an arbitrary address.
@@ -73,11 +74,18 @@ export function tripEndBoundary(tripEnd: string | null): Date | null {
  * - "wait": the trip hasn't ended, so nothing goes out yet
  * - "wrap-up": the trip has ended and no summary has been posted since; post one for the whole trip
  * - "daily": no trip, or the wrap-up is done; post a normal daily summary if something changed
+ * - "stopped": more than 20 days since the trip ended; automatic posts are over (and the trip is
+ *   archived), which also keeps the daily job's work from growing as old trips pile up
  */
-export function automaticPostPlan(tripEnd: string | null, lastPostedAt: Date | null, now: Date): "wait" | "wrap-up" | "daily" {
+export function automaticPostPlan(
+  tripEnd: string | null,
+  lastPostedAt: Date | null,
+  now: Date,
+): "wait" | "wrap-up" | "daily" | "stopped" {
   const boundary = tripEndBoundary(tripEnd);
   if (!boundary) return "daily";
   if (now < boundary) return "wait";
+  if (pastArchiveCutoff(tripEnd, now)) return "stopped";
   return !lastPostedAt || lastPostedAt < boundary ? "wrap-up" : "daily";
 }
 

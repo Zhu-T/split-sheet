@@ -73,3 +73,40 @@ export function isPendingPayment(e: { kind: "expense" | "settlement"; confirmedA
 export function paymentConfirmedOnSave(requireConfirmation: boolean, recorderMemberId: string, receiverMemberId: string): boolean {
   return !requireConfirmation || recorderMemberId === receiverMemberId;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Trips archive automatically, and automatic Discord summaries stop, this long after they end. */
+export const ARCHIVE_AFTER_DAYS = 20;
+
+/** End of the trip's last day (calendar days, UTC), or null without an end date. */
+function tripOver(tripEnd: string | null): number | null {
+  return tripEnd && /^\d{4}-\d{2}-\d{2}$/.test(tripEnd) ? Date.parse(`${tripEnd}T00:00:00Z`) + DAY_MS : null;
+}
+
+/** Listed under "Past trips": archived, or its last day is over. (Ending doesn't lock anything.) */
+export function isPastTrip(tripEnd: string | null, archivedAt: Date | string | null, now: Date): boolean {
+  const over = tripOver(tripEnd);
+  return !!archivedAt || (over !== null && now.getTime() >= over);
+}
+
+/** More than ARCHIVE_AFTER_DAYS since the trip's last day ended. */
+export function pastArchiveCutoff(tripEnd: string | null, now: Date): boolean {
+  const over = tripOver(tripEnd);
+  return over !== null && now.getTime() > over + ARCHIVE_AFTER_DAYS * DAY_MS;
+}
+
+/** Latest end date that has passed the cut-off, for cheap SQL filters ("trip_end < this"). */
+export function archiveCutoffDate(now: Date): string {
+  return new Date(now.getTime() - (ARCHIVE_AFTER_DAYS + 1) * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** Should the daily job archive this trip now? Not if the owner unarchived it (autoArchive off). */
+export function shouldAutoArchive(g: { tripEnd: string | null; archivedAt: Date | null; autoArchive: boolean }, now: Date): boolean {
+  return !g.archivedAt && g.autoArchive && pastArchiveCutoff(g.tripEnd, now);
+}
+
+/** Archived trips keep their expenses read-only; payments are still allowed so people can settle up. */
+export function canChangeExpense(kind: "expense" | "settlement", archivedAt: Date | string | null): boolean {
+  return kind === "settlement" || !archivedAt;
+}

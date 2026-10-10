@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PageMotion } from "@/components/motion";
 import { Card, Initials, Page, SettingsIcon, Skeleton, TopBar, cx } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
-import { isPendingPayment } from "@/lib/rules";
+import { isPastTrip, isPendingPayment } from "@/lib/rules";
 import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRates } from "@/lib/fx";
 import { asCurrency, balancesFor, loadExpenses, loadGroupNav, loadMembers } from "@/lib/queries";
@@ -48,6 +48,9 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
     groupId: group.id,
     groupName: group.name,
     requireConfirmation: group.requirePaymentConfirmation,
+    archived: !!group.archivedAt,
+    isOwner: member.role === "owner",
+    tripOver: isPastTrip(group.tripEnd, null, new Date()),
     trip: group.tripStart || group.tripEnd ? { start: group.tripStart, end: group.tripEnd } : null,
     base,
     myMemberId: member.id,
@@ -71,6 +74,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
       splitType: e.splitType,
       updatedAt: e.updatedAt.toISOString(),
       pending: isPendingPayment(e),
+      edited: e.edited,
       splits: e.splits,
     })),
     balances: Object.fromEntries(balances),
@@ -103,7 +107,31 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
 }
 
 /** Desktop sidebar: jump between groups without going back to the dashboard. */
-function GroupNav({ groups, currentId }: { groups: { id: string; name: string }[]; currentId: string }) {
+function GroupNav({
+  groups,
+  currentId,
+}: {
+  groups: { id: string; name: string; tripEnd: string | null; archivedAt: Date | null }[];
+  currentId: string;
+}) {
+  const now = new Date();
+  const current = groups.filter((g) => !isPastTrip(g.tripEnd, g.archivedAt, now));
+  const past = groups.filter((g) => isPastTrip(g.tripEnd, g.archivedAt, now));
+  const item = (g: { id: string; name: string }) => {
+    const here = g.id === currentId;
+    return (
+      <li key={g.id}>
+        <Link
+          href={`/groups/${g.id}`}
+          aria-current={here ? "page" : undefined}
+          className={cx("flex min-h-11 items-center gap-2 px-3 text-sm transition-colors hover:bg-surface-2/60", here && "bg-surface-2 font-semibold")}
+        >
+          <Initials name={g.name} className="size-7 text-xs" />
+          <span className="truncate">{g.name}</span>
+        </Link>
+      </li>
+    );
+  };
   return (
     <Card className="overflow-hidden">
       <Link
@@ -113,26 +141,13 @@ function GroupNav({ groups, currentId }: { groups: { id: string; name: string }[
       >
         All groups
       </Link>
-      <ul className="py-1">
-        {groups.map((g) => {
-          const current = g.id === currentId;
-          return (
-            <li key={g.id}>
-              <Link
-                href={`/groups/${g.id}`}
-                aria-current={current ? "page" : undefined}
-                className={cx(
-                  "flex min-h-11 items-center gap-2 px-3 text-sm transition-colors hover:bg-surface-2/60",
-                  current && "bg-surface-2 font-semibold",
-                )}
-              >
-                <Initials name={g.name} className="size-7 text-xs" />
-                <span className="truncate">{g.name}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      <ul className="py-1">{current.map(item)}</ul>
+      {past.length > 0 && (
+        <>
+          <p className="border-t border-line px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">Past trips</p>
+          <ul className="pb-1">{past.map(item)}</ul>
+        </>
+      )}
     </Card>
   );
 }

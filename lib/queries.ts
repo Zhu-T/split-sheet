@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { computeBalances, type LedgerEntry } from "./balances";
 import { isCurrency, type Currency } from "./currencies";
@@ -39,8 +39,17 @@ export async function loadExpenses(groupId: string) {
         .where(inArray(schema.expenseSplits.expenseId, rows.map((r) => r.id)))
     : [];
   const byExpense = Map.groupBy(splits, (s) => s.expenseId);
+  // Which expenses have been edited since they were added (shown as a small "edited" note).
+  const editedRows = rows.length
+    ? await db
+        .selectDistinct({ expenseId: schema.expenseEvents.expenseId })
+        .from(schema.expenseEvents)
+        .where(and(inArray(schema.expenseEvents.expenseId, rows.map((r) => r.id)), eq(schema.expenseEvents.action, "edited")))
+    : [];
+  const edited = new Set(editedRows.map((r) => r.expenseId));
   return rows.map((e) => ({
     ...e,
+    edited: edited.has(e.id),
     currency: asCurrency(e.currency),
     splits: (byExpense.get(e.id) ?? []).map((s) => ({
       memberId: s.memberId,
@@ -92,6 +101,9 @@ export async function loadMyGroups(userId: string) {
       return {
         id: group.id,
         name: group.name,
+        tripStart: group.tripStart,
+        tripEnd: group.tripEnd,
+        archivedAt: group.archivedAt,
         base,
         net: balances.get(memberId) ?? 0,
         debts: myDebts(transfers, memberId, counterpartOf, { id: group.id, name: group.name, currency: base }),
@@ -103,9 +115,37 @@ export async function loadMyGroups(userId: string) {
 /** Names of a user's groups, for the group page's sidebar (no balances, so it's cheap). */
 export function loadGroupNav(userId: string) {
   return db
-    .select({ id: schema.groups.id, name: schema.groups.name })
+    .select({ id: schema.groups.id, name: schema.groups.name, tripEnd: schema.groups.tripEnd, archivedAt: schema.groups.archivedAt })
     .from(schema.members)
     .innerJoin(schema.groups, eq(schema.groups.id, schema.members.groupId))
     .where(and(eq(schema.members.userId, userId), eq(schema.members.active, true)))
     .orderBy(desc(schema.groups.createdAt));
+}
+
+/** Expenses and payments deleted in the last 30 days, newest first, with who deleted them. */
+export async function loadRecentlyDeleted(groupId: string) {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select()
+    .from(schema.expenses)
+    .where(and(eq(schema.expenses.groupId, groupId), gt(schema.expenses.deletedAt, since)))
+    .orderBy(desc(schema.expenses.deletedAt))
+    .limit(50);
+  if (!rows.length) return [];
+  const deletions = await db
+    .select({ expenseId: schema.expenseEvents.expenseId, memberId: schema.expenseEvents.memberId, at: schema.expenseEvents.createdAt })
+    .from(schema.expenseEvents)
+    .where(and(inArray(schema.expenseEvents.expenseId, rows.map((r) => r.id)), eq(schema.expenseEvents.action, "deleted")))
+    .orderBy(desc(schema.expenseEvents.createdAt));
+  const deleter = new Map<string, string | null>();
+  for (const d of deletions) if (!deleter.has(d.expenseId)) deleter.set(d.expenseId, d.memberId);
+  return rows.map((e) => ({
+    id: e.id,
+    kind: e.kind,
+    description: e.description,
+    amountMinor: e.amountMinor,
+    currency: asCurrency(e.currency),
+    deletedAt: e.deletedAt!.toISOString(),
+    deletedBy: deleter.get(e.id) ?? null,
+  }));
 }

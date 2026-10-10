@@ -4,6 +4,7 @@ import {
   date,
   doublePrecision,
   index,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -16,6 +17,7 @@ import {
 export const roleEnum = pgEnum("member_role", ["owner", "member"]);
 export const kindEnum = pgEnum("expense_kind", ["expense", "settlement"]);
 export const splitTypeEnum = pgEnum("split_type", ["equal", "exact", "percent"]);
+export const expenseEventEnum = pgEnum("expense_event", ["created", "edited", "deleted", "restored", "confirmed"]);
 
 const money = (name: string) => bigint(name, { mode: "number" });
 
@@ -46,9 +48,19 @@ export const groups = pgTable("groups", {
   discordAutoDigest: boolean("discord_auto_digest").notNull().default(false),
   // Optional: payments recorded by the payer wait for the person being paid to confirm them.
   requirePaymentConfirmation: boolean("require_payment_confirmation").notNull().default(false),
+  // Set by the owner, or automatically 20 days after the trip ends: expenses become read-only
+  // (payments still allowed) and Discord posts stop.
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  // Cleared when the owner unarchives, so the daily job doesn't immediately re-archive the trip.
+  autoArchive: boolean("auto_archive").notNull().default(true),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+// The daily Discord cron filters on these, so it only ever loads recent or ongoing trips.
+(t) => [
+  index("groups_digest_idx").on(t.discordAutoDigest, t.tripEnd),
+  index("groups_auto_archive_idx").on(t.autoArchive, t.archivedAt, t.tripEnd),
+]);
 
 export const members = pgTable(
   "members",
@@ -102,6 +114,35 @@ export const expenseSplits = pgTable(
     shareMinor: money("share_minor").notNull(),
   },
   (t) => [primaryKey({ columns: [t.expenseId, t.memberId] })],
+);
+
+/** What an expense looked like before/after a change. Member IDs (not names) so history shows current names. */
+export type ExpenseSnapshot = {
+  kind: "expense" | "settlement";
+  description: string;
+  amountMinor: number;
+  currency: string;
+  fxRate: number;
+  date: string;
+  payerId: string;
+  splitType: "equal" | "exact" | "percent";
+  splits: { memberId: string; shareMinor: number }[];
+};
+
+/** Who changed what on an expense or payment, and when. */
+export const expenseEvents = pgTable(
+  "expense_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    expenseId: uuid("expense_id").notNull().references(() => expenses.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id").references(() => members.id, { onDelete: "set null" }),
+    action: expenseEventEnum("action").notNull(),
+    before: jsonb("before").$type<ExpenseSnapshot>(),
+    after: jsonb("after").$type<ExpenseSnapshot>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("expense_events_expense_idx").on(t.expenseId, t.createdAt), index("expense_events_group_idx").on(t.groupId, t.createdAt)],
 );
 
 export type Group = typeof groups.$inferSelect;

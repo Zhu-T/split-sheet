@@ -2,7 +2,8 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type CSSProperties, type ReactNode } from "react";
-import { confirmPayment, deleteExpense } from "@/app/actions/expenses";
+import { confirmPayment, deleteExpense, restoreExpense } from "@/app/actions/expenses";
+import { setArchived } from "@/app/actions/groups";
 import { useConfirm } from "@/components/confirm";
 import { CountUp } from "@/components/count-up";
 import { Button, Card, Initials, Money, SectionTitle, cx, inputClass } from "@/components/ui";
@@ -33,8 +34,10 @@ export type ExpenseView = {
   fxRate: number;
   splitType: SplitType;
   updatedAt: string;
-  /** A payment waiting for the person being paid to confirm it (not in balances yet). */
+  /** A payment the person being paid hasn't confirmed yet (it already counts towards balances). */
   pending: boolean;
+  /** Changed since it was added (shown as a small "edited" note). */
+  edited: boolean;
   splits: { memberId: string; shareMinor: number; input: number }[];
 };
 
@@ -43,6 +46,11 @@ export type GroupData = {
   groupName: string;
   /** Payments recorded by the payer wait for the recipient to confirm them. */
   requireConfirmation: boolean;
+  /** Archived: expenses are read-only (payments still work). */
+  archived: boolean;
+  isOwner: boolean;
+  /** The trip's last day is over (used to suggest archiving once everyone is settled). */
+  tripOver: boolean;
   trip: { start: string | null; end: string | null } | null;
   base: Currency;
   myMemberId: string;
@@ -62,12 +70,14 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
   // Sheets stay mounted while closing so they can animate out; `key` resets their form on each open.
   const [expenseSheet, setExpenseSheet] = useState<ExpenseSheetState>({ open: false, expense: null, key: 0 });
   const [settleSheet, setSettleSheet] = useState<SettleSheetState>({ open: false, draft: null, existing: null, key: 0 });
-  const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
+  const [toast, setToast] = useState<{ id: number; text: string; undoId?: string } | null>(null);
+  const [undoing, startUndo] = useTransition();
   const justCreated = useSearchParams().get("created") === "1";
 
   const names = useMemo(() => new Map(data.members.map((m) => [m.id, m.name])), [data.members]);
   const nameOf = (id: string) => (id === data.myMemberId ? "You" : (names.get(id) ?? "Someone"));
   const me = data.myMemberId;
+  const archived = data.archived;
   const myNet = data.balances[me] ?? 0;
   const mine = data.transfers.filter((t) => t.from === me || t.to === me);
   const others = data.transfers.filter((t) => t.from !== me && t.to !== me);
@@ -77,15 +87,22 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
     else setExpenseSheet((s) => ({ open: true, expense: e, key: s.key + 1 }));
   };
   const openSettle = (t: SettleDraft | null) => setSettleSheet((s) => ({ open: true, draft: t, existing: null, key: s.key + 1 }));
-  const done = (text?: string) => {
+  /** Close any open sheet and show a toast; `undoId` (after a delete) adds an Undo button. */
+  const done = (text?: string, undoId?: string) => {
     setExpenseSheet((s) => ({ ...s, open: false }));
     setSettleSheet((s) => ({ ...s, open: false }));
-    if (text) setToast({ id: Date.now(), text });
+    if (text) setToast({ id: Date.now(), text, undoId });
   };
+  const undo = (expenseId: string) =>
+    startUndo(async () => {
+      const r = await restoreExpense(data.groupId, expenseId);
+      setToast({ id: Date.now(), text: r.error ?? "Restored" });
+    });
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2600);
+    // Longer when there's an Undo button, so there's time to tap it.
+    const t = setTimeout(() => setToast(null), toast.undoId ? 6000 : 2600);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -94,7 +111,7 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
     function onKey(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey || document.querySelector("dialog[open]")) return;
       if ((e.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return;
-      if (e.key === "n" || e.key === "N") {
+      if ((e.key === "n" || e.key === "N") && !archived) {
         e.preventDefault();
         setExpenseSheet((s) => ({ open: true, expense: null, key: s.key + 1 }));
       } else if (e.key === "/") {
@@ -107,7 +124,7 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [archived]);
 
   const panel = <GroupPanel data={data} nameOf={nameOf} others={others} onSettle={openSettle} />;
 
@@ -123,6 +140,10 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
           </Card>
         )}
 
+        {data.archived && <ArchivedBanner groupId={data.groupId} isOwner={data.isOwner} />}
+        {data.isOwner && !data.archived && data.tripOver && data.transfers.length === 0 && data.expenses.length > 0 && (
+          <ArchiveSuggestion groupId={data.groupId} />
+        )}
         <PendingForMe data={data} nameOf={nameOf} onDone={done} />
 
         {/* Hierarchy: the one number that matters comes first and largest. */}
@@ -155,9 +176,11 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
               <Button variant="secondary" onClick={() => openSettle(mine[0] ?? null)}>
                 Settle up
               </Button>
-              <Button onClick={() => openEntry(null)} aria-keyshortcuts="n" title="Add expense (N)">
-                Add expense
-              </Button>
+              {!data.archived && (
+                <Button onClick={() => openEntry(null)} aria-keyshortcuts="n" title="Add expense (N)">
+                  Add expense
+                </Button>
+              )}
             </div>
           </div>
           {mine.length > 0 && (
@@ -190,12 +213,28 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
       <div className="bottom-safe pointer-events-none fixed inset-x-0 z-10 mx-auto flex max-w-6xl flex-col items-end gap-3 px-4">
         <div role="status" aria-live="polite" className="w-full">
           {toast && (
-            <p key={toast.id} className="toast mx-auto w-fit rounded-full bg-text px-4 py-2.5 text-sm font-medium text-bg shadow-lg">
-              {toast.text}
-            </p>
+            <div
+              key={toast.id}
+              className="toast pointer-events-auto mx-auto flex w-fit items-center gap-3 rounded-full bg-text py-1.5 pr-1.5 pl-4 text-sm font-medium text-bg shadow-lg"
+            >
+              <span className="py-1">{toast.text}</span>
+              {toast.undoId ? (
+                <button
+                  type="button"
+                  disabled={undoing}
+                  onClick={() => undo(toast.undoId!)}
+                  className="min-h-9 rounded-full bg-bg/15 px-3 font-semibold text-bg transition active:scale-95"
+                >
+                  Undo
+                </button>
+              ) : (
+                <span className="pr-2.5" />
+              )}
+            </div>
           )}
         </div>
         <Button
+          hidden={data.archived}
           className="pointer-events-auto h-14 rounded-full px-6 shadow-lg md:hidden"
           onClick={() => openEntry(null)}
           aria-keyshortcuts="n"
@@ -456,8 +495,11 @@ function ExpenseRow({
           ))}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">
-            {settlement ? `${nameOf(e.payerId)} paid ${nameOf(e.splits[0]?.memberId ?? "")}` : e.description}
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="truncate font-medium">
+              {settlement ? `${nameOf(e.payerId)} paid ${nameOf(e.splits[0]?.memberId ?? "")}` : e.description}
+            </span>
+            {e.edited && <span className="shrink-0 text-xs text-muted">edited</span>}
           </span>
           {/* Amount first, so on narrow screens only the payer's name gets truncated, never the money. */}
           <span className="block truncate text-sm text-muted">
@@ -527,7 +569,7 @@ function PendingForMe({
 }: {
   data: GroupData;
   nameOf: (id: string) => string;
-  onDone: (message?: string) => void;
+  onDone: (message?: string, undoId?: string) => void;
 }) {
   const [busy, startTransition] = useTransition();
   const [confirm, confirmDialog] = useConfirm();
@@ -561,7 +603,7 @@ function PendingForMe({
                   });
                   if (ok) startTransition(async () => {
                     const r = await deleteExpense(data.groupId, e.id);
-                    onDone(r.error ?? "Payment removed");
+                    onDone(r.error ?? "Payment removed", r.deletedId);
                   });
                 }}
               >
@@ -584,6 +626,44 @@ function PendingForMe({
         ))}
       </ul>
       {confirmDialog}
+    </Card>
+  );
+}
+
+/** Shown on archived trips. The owner can unarchive from here. */
+function ArchivedBanner({ groupId, isOwner }: { groupId: string; isOwner: boolean }) {
+  const [busy, startTransition] = useTransition();
+  return (
+    <Card className="rise mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 p-4">
+      <svg viewBox="0 0 24 24" className="size-5 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <rect x="3" y="4" width="18" height="4" rx="1" />
+        <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" />
+      </svg>
+      <p className="min-w-0 flex-1 text-sm">
+        <span className="font-medium">This trip is archived.</span>{" "}
+        <span className="text-muted">Expenses are read-only; payments still work.</span>
+      </p>
+      {isOwner && (
+        <Button variant="secondary" className="min-h-10 px-3 text-sm" disabled={busy} onClick={() => startTransition(() => setArchived(groupId, false))}>
+          Unarchive
+        </Button>
+      )}
+    </Card>
+  );
+}
+
+/** Owner: suggest archiving once the trip is over and everyone has settled up. */
+function ArchiveSuggestion({ groupId }: { groupId: string }) {
+  const [busy, startTransition] = useTransition();
+  return (
+    <Card className="rise mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-accent/40 p-4">
+      <p className="min-w-0 flex-1 text-sm">
+        <span className="font-medium">Trip&apos;s over and everyone&apos;s settled.</span>{" "}
+        <span className="text-muted">Archive it to keep it as a read-only record?</span>
+      </p>
+      <Button className="min-h-10 px-3 text-sm" disabled={busy} onClick={() => startTransition(() => setArchived(groupId, true))}>
+        Archive
+      </Button>
     </Card>
   );
 }

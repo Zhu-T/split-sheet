@@ -1,15 +1,17 @@
 "use server";
 
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
+import type { ExpenseSnapshot } from "@/db/schema";
 import { requireMember } from "@/lib/authz";
 import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRate } from "@/lib/fx";
-import { decimals, parseAmount } from "@/lib/money";
+import { describeChanges, describeEvent, snapshotsDiffer } from "@/lib/history";
+import { decimals, formatMoney, parseAmount } from "@/lib/money";
 import { asCurrency } from "@/lib/queries";
-import { LIMITS, membersBelongToGroup, paymentConfirmedOnSave } from "@/lib/rules";
+import { canChangeExpense, LIMITS, membersBelongToGroup, paymentConfirmedOnSave } from "@/lib/rules";
 import { computeShares, SPLIT_TYPES, type SplitInput, type SplitType } from "@/lib/split";
 import type { ActionResult } from "./groups";
 
@@ -52,6 +54,7 @@ export async function saveExpense(groupId: string, raw: ExpenseInput): Promise<A
   const parsed = ExpenseInput.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const input = parsed.data;
+  if (!canChangeExpense(input.kind, group.archivedAt)) return { error: ARCHIVED };
   const base = asCurrency(group.baseCurrency);
 
   const amountMinor = parseAmount(input.amount, input.currency);
@@ -104,6 +107,18 @@ export async function saveExpense(groupId: string, raw: ExpenseInput): Promise<A
   const splitRows = (expenseId: string) =>
     result.shares.map((s) => ({ expenseId, memberId: s.memberId, shareMinor: s.shareMinor, input: inputById.get(s.memberId) ?? 0 }));
 
+  const after: ExpenseSnapshot = {
+    kind: input.kind,
+    description: input.description,
+    amountMinor,
+    currency: input.currency,
+    fxRate,
+    date: input.date,
+    payerId: input.payerId,
+    splitType: input.splitType,
+    splits: result.shares.map((sh) => ({ memberId: sh.memberId, shareMinor: sh.shareMinor })),
+  };
+
   const saved: ActionResult = await db.transaction(async (tx) => {
     const groupMembers = await tx
       .select({ id: schema.members.id, active: schema.members.active })
@@ -123,29 +138,34 @@ export async function saveExpense(groupId: string, raw: ExpenseInput): Promise<A
         .values({ ...values, groupId, createdBy: me.id, createdAt: now })
         .returning({ id: schema.expenses.id });
       await tx.insert(schema.expenseSplits).values(splitRows(created.id));
+      await tx.insert(schema.expenseEvents).values({ expenseId: created.id, groupId, memberId: me.id, action: "created", after, createdAt: now });
     } else {
       const [existing] = await tx
-        .select({ payer: schema.expenses.payerMemberId, updatedAt: schema.expenses.updatedAt })
+        .select()
         .from(schema.expenses)
         .where(
           and(eq(schema.expenses.id, input.expenseId), eq(schema.expenses.groupId, groupId), isNull(schema.expenses.deletedAt)),
         )
         .for("update");
       if (!existing) return { error: "This expense no longer exists" };
+      if (existing.kind !== input.kind) return { error: "An expense can't be turned into a payment (or back)" };
       if (input.expectedUpdatedAt && existing.updatedAt.toISOString() !== input.expectedUpdatedAt) {
         return { error: "Someone else just changed this expense. Close and reopen it to see their changes." };
       }
       const oldSplits = await tx
-        .select({ memberId: schema.expenseSplits.memberId })
+        .select({ memberId: schema.expenseSplits.memberId, shareMinor: schema.expenseSplits.shareMinor })
         .from(schema.expenseSplits)
         .where(eq(schema.expenseSplits.expenseId, input.expenseId));
-      const alreadyReferenced = new Set([existing.payer, ...oldSplits.map((s) => s.memberId)]);
+      const alreadyReferenced = new Set([existing.payerMemberId, ...oldSplits.map((s) => s.memberId)]);
       if (!membersBelongToGroup(referenced, groupMembers, alreadyReferenced)) {
         return { error: "Someone in this split isn't in the group" };
       }
+      const before = snapshotOf(existing, oldSplits);
+      if (!snapshotsDiffer(before, after)) return {}; // nothing changed: no write, no history entry
       await tx.update(schema.expenses).set(values).where(eq(schema.expenses.id, input.expenseId));
       await tx.delete(schema.expenseSplits).where(eq(schema.expenseSplits.expenseId, input.expenseId));
       await tx.insert(schema.expenseSplits).values(splitRows(input.expenseId));
+      await tx.insert(schema.expenseEvents).values({ expenseId: input.expenseId, groupId, memberId: me.id, action: "edited", before, after, createdAt: now });
     }
     refresh();
     return {};
@@ -153,19 +173,68 @@ export async function saveExpense(groupId: string, raw: ExpenseInput): Promise<A
   return saved;
 }
 
-export async function deleteExpense(groupId: string, expenseId: string): Promise<ActionResult> {
-  await requireMember(groupId);
-  if (!z.uuid().safeParse(expenseId).success) return { error: "Unknown expense" };
-  const now = new Date();
-  await db
-    .update(schema.expenses)
-    .set({ deletedAt: now, updatedAt: now })
-    .where(and(eq(schema.expenses.id, expenseId), eq(schema.expenses.groupId, groupId), isNull(schema.expenses.deletedAt)));
-  refresh();
-  return {};
+const ARCHIVED = "This trip is archived. Unarchive it to change expenses.";
+
+type ExpenseRowForSnapshot = Pick<
+  typeof schema.expenses.$inferSelect,
+  "kind" | "description" | "amountMinor" | "currency" | "fxRate" | "date" | "payerMemberId" | "splitType"
+>;
+
+function snapshotOf(e: ExpenseRowForSnapshot, splits: { memberId: string; shareMinor: number }[]): ExpenseSnapshot {
+  return {
+    kind: e.kind,
+    description: e.description,
+    amountMinor: e.amountMinor,
+    currency: e.currency,
+    fxRate: e.fxRate,
+    date: e.date,
+    payerId: e.payerMemberId,
+    splitType: e.splitType,
+    splits: splits.map((sp) => ({ memberId: sp.memberId, shareMinor: sp.shareMinor })),
+  };
 }
 
-/** The person being paid confirms they received a payment, so it now counts towards balances. */
+/** Soft-delete an expense or payment. Returns its id so the screen can offer Undo. */
+export async function deleteExpense(groupId: string, expenseId: string): Promise<ActionResult & { deletedId?: string }> {
+  const { group, member: me } = await requireMember(groupId);
+  if (!z.uuid().safeParse(expenseId).success) return { error: "Unknown expense" };
+  const now = new Date();
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ kind: schema.expenses.kind })
+      .from(schema.expenses)
+      .where(and(eq(schema.expenses.id, expenseId), eq(schema.expenses.groupId, groupId), isNull(schema.expenses.deletedAt)))
+      .for("update");
+    if (!row) return { error: "This expense no longer exists" };
+    if (!canChangeExpense(row.kind, group.archivedAt)) return { error: ARCHIVED };
+    await tx.update(schema.expenses).set({ deletedAt: now, updatedAt: now }).where(eq(schema.expenses.id, expenseId));
+    await tx.insert(schema.expenseEvents).values({ expenseId, groupId, memberId: me.id, action: "deleted", createdAt: now });
+    refresh();
+    return { deletedId: expenseId };
+  });
+}
+
+/** Undo a delete (from the toast or Recently deleted). Any member can, as any member can delete. */
+export async function restoreExpense(groupId: string, expenseId: string): Promise<ActionResult> {
+  const { group, member: me } = await requireMember(groupId);
+  if (!z.uuid().safeParse(expenseId).success) return { error: "Unknown expense" };
+  const now = new Date();
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ kind: schema.expenses.kind })
+      .from(schema.expenses)
+      .where(and(eq(schema.expenses.id, expenseId), eq(schema.expenses.groupId, groupId), isNotNull(schema.expenses.deletedAt)))
+      .for("update");
+    if (!row) return { error: "Nothing to restore" };
+    if (!canChangeExpense(row.kind, group.archivedAt)) return { error: ARCHIVED };
+    await tx.update(schema.expenses).set({ deletedAt: null, updatedAt: now }).where(eq(schema.expenses.id, expenseId));
+    await tx.insert(schema.expenseEvents).values({ expenseId, groupId, memberId: me.id, action: "restored", createdAt: now });
+    refresh();
+    return {};
+  });
+}
+
+/** The person being paid confirms they received a payment. */
 export async function confirmPayment(groupId: string, expenseId: string): Promise<ActionResult> {
   const { member: me } = await requireMember(groupId);
   if (!z.uuid().safeParse(expenseId).success) return { error: "Unknown payment" };
@@ -184,10 +253,43 @@ export async function confirmPayment(groupId: string, expenseId: string): Promis
   if (!receiver) return { error: "This payment no longer exists" };
   // Only the person who received the money can confirm it.
   if (receiver.memberId !== me.id) return { error: "Only the person being paid can confirm this" };
-  await db
+  const confirmed = await db
     .update(schema.expenses)
     .set({ confirmedAt: new Date() })
-    .where(and(eq(schema.expenses.id, expenseId), isNull(schema.expenses.confirmedAt)));
+    .where(and(eq(schema.expenses.id, expenseId), isNull(schema.expenses.confirmedAt)))
+    .returning({ id: schema.expenses.id });
+  if (confirmed.length) {
+    await db.insert(schema.expenseEvents).values({ expenseId, groupId, memberId: me.id, action: "confirmed" });
+  }
   refresh();
   return {};
+}
+
+export type HistoryEntry = { id: string; at: string; headline: string; lines: string[] };
+
+/** An expense's history, newest first, as readable lines (with people's current names). */
+export async function getExpenseHistory(groupId: string, expenseId: string): Promise<HistoryEntry[]> {
+  await requireMember(groupId);
+  if (!z.uuid().safeParse(expenseId).success) return [];
+  const [events, members] = await Promise.all([
+    db
+      .select()
+      .from(schema.expenseEvents)
+      .where(and(eq(schema.expenseEvents.expenseId, expenseId), eq(schema.expenseEvents.groupId, groupId)))
+      .orderBy(desc(schema.expenseEvents.createdAt))
+      .limit(50),
+    db.select({ id: schema.members.id, name: schema.members.displayName }).from(schema.members).where(eq(schema.members.groupId, groupId)),
+  ]);
+  const names = new Map(members.map((m) => [m.id, m.name]));
+  const nameOf = (id: string) => names.get(id) ?? "Someone";
+  const money = (minor: number, currency: string) => formatMoney(minor, asCurrency(currency));
+  return events.map((e) => {
+    const kind = (e.after ?? e.before)?.kind ?? "expense";
+    return {
+      id: e.id,
+      at: e.createdAt.toISOString(),
+      headline: describeEvent(e.action, e.memberId ? nameOf(e.memberId) : "Someone", kind),
+      lines: e.action === "edited" && e.before && e.after ? describeChanges(e.before, e.after, nameOf, money) : [],
+    };
+  });
 }

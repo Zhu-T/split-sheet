@@ -3,8 +3,9 @@ import { PageMotion } from "@/components/motion";
 import { Card, Page, SectionTitle, Skeleton, TopBar, buttonStyles } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
 import { automaticPostPlan, nextPostAllowedAt } from "@/lib/discord";
-import { loadMembers } from "@/lib/queries";
-import { DeleteGroupCard, DiscordCard, GroupForm, InviteCard, MembersList, PaymentsCard } from "./settings-forms";
+import { formatMoney } from "@/lib/money";
+import { loadMembers, loadRecentlyDeleted } from "@/lib/queries";
+import { ArchiveCard, DeleteGroupCard, DiscordCard, GroupForm, InviteCard, MembersList, PaymentsCard, RecentlyDeletedCard } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Group settings" };
 
@@ -28,8 +29,10 @@ export default function GroupSettingsPage({ params }: PageProps<"/groups/[id]/se
 async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "params">) {
   const { id } = await params;
   const { group, member } = await requireMember(id);
-  const members = await loadMembers(id);
+  const [members, deleted] = await Promise.all([loadMembers(id), loadRecentlyDeleted(id)]);
   const isOwner = member.role === "owner";
+  const names = new Map(members.map((m) => [m.id, m.displayName]));
+  const now = new Date();
 
   return (
     <>
@@ -64,13 +67,37 @@ async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "pa
           isOwner={isOwner}
           autoDigest={group.discordAutoDigest}
           nextPostAt={nextPostAllowedAt(group.discordLastPostedAt, new Date())?.toISOString() ?? null}
-          pausedUntil={automaticPostPlan(group.tripEnd, group.discordLastPostedAt, new Date()) === "wait" ? group.tripEnd : null}
+          pausedUntil={automaticPostPlan(group.tripEnd, group.discordLastPostedAt, now) === "wait" ? group.tripEnd : null}
+          automaticEnded={!!group.archivedAt || automaticPostPlan(group.tripEnd, group.discordLastPostedAt, now) === "stopped"}
         />
 
         <SectionTitle>Group</SectionTitle>
         <Card className="p-4">
           <GroupForm groupId={id} name={group.name} baseCurrency={group.baseCurrency} tripStart={group.tripStart} tripEnd={group.tripEnd} />
         </Card>
+
+        <SectionTitle>Recently deleted</SectionTitle>
+        <RecentlyDeletedCard
+          groupId={id}
+          archived={!!group.archivedAt}
+          items={deleted.map((d) => ({
+            id: d.id,
+            kind: d.kind,
+            description: d.description,
+            amountLabel: formatMoney(d.amountMinor, d.currency),
+            deletedAt: d.deletedAt,
+            deletedBy: d.deletedBy ? (d.deletedBy === member.id ? "you" : (names.get(d.deletedBy) ?? "someone")) : "someone",
+          }))}
+        />
+
+        <SectionTitle>Archive</SectionTitle>
+        <ArchiveCard
+          groupId={id}
+          archived={!!group.archivedAt}
+          isOwner={isOwner}
+          autoArchiveOn={group.autoArchive}
+          tripEnd={group.tripEnd}
+        />
 
         <SectionTitle>Your data</SectionTitle>
         <Card className="p-4">
