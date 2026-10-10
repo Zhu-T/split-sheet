@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { createPortal } from "react-dom";
 import { Button, cx } from "./ui";
 
 // Dates are calendar days as "YYYY-MM-DD" strings. All arithmetic is done in UTC so a day never
@@ -212,14 +213,19 @@ export function CalendarDialog({
   top?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const isClient = useSyncExternalStore(noopSubscribe, () => true, () => false);
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, isClient]);
 
-  return (
+  // Rendered on <body> (a portal), not where it's used. Pickers often sit inside a form field's
+  // <label>; a tap on the backdrop would otherwise also "click" that label, which forwards the
+  // click to its control (the picker button) and reopens the dialog straight away.
+  if (!isClient) return null;
+  return createPortal(
     <dialog
       ref={ref}
       aria-label={title}
@@ -244,9 +250,12 @@ export function CalendarDialog({
           {footer && <div className="mt-4 flex gap-2">{footer}</div>}
         </div>
       )}
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }
+
+const noopSubscribe = () => () => {};
 
 function CalendarGlyph() {
   return (
