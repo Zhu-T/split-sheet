@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { ThemeToggleButton } from "@/components/theme-toggle";
 import { signInWithDiscord } from "@/app/actions/account";
 import { cx } from "@/components/ui";
 
@@ -8,6 +9,9 @@ export const metadata: Metadata = { title: "Sign in" };
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <main className="pt-safe mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 pb-16">
+      <div className="pt-safe fixed top-0 right-0 z-10 p-2">
+        <ThemeToggleButton />
+      </div>
       <div className="mb-10">
         <div className="mb-6 grid size-14 place-items-center rounded-2xl bg-accent text-accent-ink">
           <svg viewBox="0 0 64 64" className="size-9" aria-hidden>

@@ -2,7 +2,6 @@
 
 import { useSyncExternalStore } from "react";
 import { DEFAULT_THEME, getTheme, setTheme, subscribeTheme, type Theme } from "@/lib/theme";
-import { cx } from "./ui";
 
 /** The current theme. The server always renders the default; the client corrects it after hydration. */
 export function useTheme(): Theme {
@@ -56,7 +55,7 @@ export function ThemeSegmented() {
           role="radio"
           aria-checked={theme === o.value}
           onClick={() => setTheme(o.value)}
-          className={cx("relative min-h-10 rounded-lg text-sm font-semibold transition-colors", theme === o.value ? "text-text" : "text-muted")}
+          className={`relative min-h-10 rounded-lg text-sm font-semibold transition-colors ${theme === o.value ? "text-text" : "text-muted"}`}
         >
           {o.label}
         </button>

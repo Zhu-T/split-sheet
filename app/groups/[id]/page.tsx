@@ -89,7 +89,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
             href={`/groups/${group.id}/settings`}
             transitionTypes={["nav-forward"]}
             aria-label="Group settings"
-            className="-mr-2 grid size-11 place-items-center rounded-full text-muted transition active:scale-90"
+            className="grid size-11 place-items-center rounded-full text-muted transition active:scale-90"
           >
             <SettingsIcon />
           </Link>

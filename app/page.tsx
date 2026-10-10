@@ -3,7 +3,6 @@ import type { CSSProperties } from "react";
 import { CountUp } from "@/components/count-up";
 import { PageMotion } from "@/components/motion";
 import { PeoplePanel } from "@/components/people-panel";
-import { ThemeToggleButton } from "@/components/theme-toggle";
 import { Card, Initials, Money, Page, SettingsIcon, Skeleton, TopBar } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
 import { isCurrency, type Currency } from "@/lib/currencies";
@@ -20,12 +19,9 @@ export default function DashboardPage() {
         wide
         title="Split"
         action={
-          <div className="-mr-2 flex items-center">
-            <ThemeToggleButton />
-            <Link href="/settings" transitionTypes={["nav-forward"]} aria-label="Settings" className="grid size-11 place-items-center rounded-full text-muted transition active:scale-90">
+          <Link href="/settings" transitionTypes={["nav-forward"]} aria-label="Settings" className="grid size-11 place-items-center rounded-full text-muted transition active:scale-90">
             <SettingsIcon />
-            </Link>
-          </div>
+          </Link>
         }
       />
       <Page wide>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { ThemeToggleButton } from "@/components/theme-toggle";
 import { Skeleton } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
 import { safeRedirectPath } from "@/lib/rules";
@@ -12,6 +13,9 @@ export const metadata: Metadata = { title: "Welcome" };
 export default function WelcomePage({ searchParams }: PageProps<"/welcome">) {
   return (
     <main className="pt-safe mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 pb-16">
+      <div className="pt-safe fixed top-0 right-0 z-10 p-2">
+        <ThemeToggleButton />
+      </div>
       <Suspense fallback={<Skeleton rows={1} />}>
         <Welcome searchParams={searchParams} />
       </Suspense>

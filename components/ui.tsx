@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 import type { Currency } from "@/lib/currencies";
+import { ThemeToggleButton } from "./theme-toggle";
 import { formatMoney } from "@/lib/money";
 
 export function cx(...parts: (string | false | null | undefined)[]) {
@@ -42,7 +43,11 @@ export function TopBar({ title, back, action, wide }: { title: ReactNode; back?:
           </Link>
         )}
         <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{title}</h1>
-        {action}
+        {/* Every page gets the theme toggle; the page's own action (e.g. settings) sits after it. */}
+        <div className="-mr-2 flex shrink-0 items-center">
+          <ThemeToggleButton />
+          {action}
+        </div>
       </div>
     </header>
   );
