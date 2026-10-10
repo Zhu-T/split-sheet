@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { deleteExpense, saveExpense } from "@/app/actions/expenses";
+import { DateField } from "@/components/calendar";
 import { useConfirm } from "@/components/confirm";
 import { Sheet } from "@/components/sheet";
 import { Button, ErrorText, Field, inputClass } from "@/components/ui";
@@ -140,9 +141,7 @@ export function SettleSheet({
               onOpen={() => setVenmoOpened(true)}
             />
           )}
-          <Field label="Date">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
-          </Field>
+          <DateField label="Date" value={date} onChange={setDate} />
           {from === to && <p className="text-sm text-muted">Pick two different people.</p>}
         {data.requireConfirmation && to && from !== to && to !== data.myMemberId && (
           <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">

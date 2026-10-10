@@ -54,7 +54,9 @@ export function Sheet({
   return (
     <dialog
       ref={ref}
-      onClose={() => open && onClose()}
+      // Only this dialog's own close: React also delivers close events from dialogs nested
+      // inside it (like the date picker), which must not close the sheet.
+      onClose={(e) => e.target === ref.current && open && onClose()}
       onClick={(e) => e.target === ref.current && onClose()}
       aria-label={title}
       className="sheet m-0 mt-0 h-[var(--sheet-h,100dvh)] max-h-none w-full max-w-none bg-transparent p-0 text-text sm:m-auto sm:h-auto sm:max-h-[85dvh] sm:max-w-lg"

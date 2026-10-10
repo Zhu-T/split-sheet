@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { deleteExpense, saveExpense } from "@/app/actions/expenses";
 import { useConfirm } from "@/components/confirm";
+import { DateField } from "@/components/calendar";
 import { CurrencySelect } from "@/components/currency-select";
 import { Sheet } from "@/components/sheet";
 import { Button, ErrorText, Field, Money, cx, inputClass } from "@/components/ui";
@@ -285,14 +286,10 @@ export function ExpenseSheet({
             <div className={cx("grid transition-[grid-template-rows] duration-300 ease-out", showDetails ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
               <div className="overflow-hidden" inert={!showDetails}>
                 <div className="space-y-4 border-t border-line p-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Date">
-                      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
-                    </Field>
-                    <Field label="Currency">
-                      <CurrencySelect value={currency} onChange={changeCurrency} />
-                    </Field>
-                  </div>
+                  <DateField label="Date" value={date} onChange={setDate} />
+                  <Field label="Currency">
+                    <CurrencySelect value={currency} onChange={changeCurrency} />
+                  </Field>
                   {currency !== data.base && (
                     <Field
                       label={`Rate: 1 ${currency} = ? ${data.base}`}
