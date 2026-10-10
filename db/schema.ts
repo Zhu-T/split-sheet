@@ -34,12 +34,16 @@ export const groups = pgTable("groups", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   baseCurrency: text("base_currency").notNull(),
+  // Optional trip dates (calendar days). Automatic Discord summaries wait until the trip ends.
+  tripStart: date("trip_start", { mode: "string" }),
+  tripEnd: date("trip_end", { mode: "string" }),
   inviteToken: text("invite_token").notNull().unique(),
   // Secret (anyone with it can post to the channel): only the owner can set it; never sent to browsers.
   discordWebhookUrl: text("discord_webhook_url"),
-  // Daily summary: when it was last posted (enforces one per day) and whether the cron posts it.
+  // Daily summary: when it was last posted (enforces one per day) and the owner's
+  // notifications toggle (off until turned on; only automatic posts depend on it).
   discordLastPostedAt: timestamp("discord_last_posted_at", { withTimezone: true }),
-  discordAutoDigest: boolean("discord_auto_digest").notNull().default(true),
+  discordAutoDigest: boolean("discord_auto_digest").notNull().default(false),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -37,6 +37,7 @@ export type ExpenseView = {
 export type GroupData = {
   groupId: string;
   groupName: string;
+  trip: { start: string | null; end: string | null } | null;
   base: Currency;
   myMemberId: string;
   members: MemberView[];
@@ -120,6 +121,15 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
         <Card className="rise px-5 py-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
+              {data.trip && (
+                <p className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-muted">
+                  <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                    <rect x="3" y="5" width="18" height="16" rx="2" />
+                    <path d="M3 10h18M8 3v4M16 3v4" />
+                  </svg>
+                  {tripLabel(data.trip)}
+                </p>
+              )}
               <p className="text-sm text-muted">Your balance</p>
               <p className="mt-1 text-3xl font-semibold tracking-tight">
                 {myNet === 0 ? (
@@ -471,4 +481,11 @@ function ExpenseRow({
 function formatDate(iso: string) {
   const d = new Date(`${iso}T00:00:00`);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** "Oct 1 – Oct 8", "From Oct 1" or "Until Oct 8" (dates are calendar days, shown in UTC). */
+function tripLabel(trip: { start: string | null; end: string | null }) {
+  const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  if (trip.start && trip.end) return `${day(trip.start)} – ${day(trip.end)}`;
+  return trip.start ? `From ${day(trip.start)}` : `Until ${day(trip.end!)}`;
 }

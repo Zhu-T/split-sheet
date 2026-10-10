@@ -8,6 +8,7 @@ import {
   postDiscordSummaryNow,
   removeDiscordWebhook,
   rotateInvite,
+  sendTestDiscordMessage,
   setDiscordAutoDigest,
   setDiscordWebhook,
   setMemberActive,
@@ -228,7 +229,19 @@ function MemberSheet({
   );
 }
 
-export function GroupForm({ groupId, name, baseCurrency }: { groupId: string; name: string; baseCurrency: string }) {
+export function GroupForm({
+  groupId,
+  name,
+  baseCurrency,
+  tripStart,
+  tripEnd,
+}: {
+  groupId: string;
+  name: string;
+  baseCurrency: string;
+  tripStart: string | null;
+  tripEnd: string | null;
+}) {
   const [state, action, pending] = useActionState(updateGroup.bind(null, groupId), {});
   return (
     <form action={action} className="space-y-4">
@@ -238,6 +251,20 @@ export function GroupForm({ groupId, name, baseCurrency }: { groupId: string; na
       <Field label="Currency">
         <CurrencySelect name="baseCurrency" defaultValue={baseCurrency} />
       </Field>
+      <fieldset>
+        <legend className="mb-1 text-sm font-medium text-muted">Trip dates (optional)</legend>
+        <div className="grid grid-cols-2 gap-3">
+          <label>
+            <span className="sr-only">Start date</span>
+            <input type="date" name="tripStart" defaultValue={tripStart ?? ""} aria-label="Trip start" className={inputClass} />
+          </label>
+          <label>
+            <span className="sr-only">End date</span>
+            <input type="date" name="tripEnd" defaultValue={tripEnd ?? ""} aria-label="Trip end" className={inputClass} />
+          </label>
+        </div>
+        <p className="mt-1 text-sm text-muted">Discord summaries wait until the trip ends, then post a wrap-up.</p>
+      </fieldset>
       <ErrorText>{state.error}</ErrorText>
       <Button variant="secondary" disabled={pending}>
         {pending ? "Saving…" : "Save changes"}
@@ -253,13 +280,17 @@ export function DiscordCard({
   isOwner,
   autoDigest,
   nextPostAt,
+  pausedUntil,
 }: {
   groupId: string;
   connected: boolean;
   isOwner: boolean;
+  /** The notifications toggle: whether summaries are posted automatically. */
   autoDigest: boolean;
   /** When the next summary may be posted; null if one can be posted now. */
   nextPostAt: string | null;
+  /** The trip's end date while the trip is still in progress (automatic posts wait for it). */
+  pausedUntil: string | null;
 }) {
   const [state, formAction, pending] = useActionState(setDiscordWebhook.bind(null, groupId), {} as WebhookFormState);
   const [busy, startTransition] = useTransition();
@@ -289,13 +320,19 @@ export function DiscordCard({
           Connected to a Discord channel
         </p>
         <p className="mt-1 text-sm text-muted">
-          At most one message a day: new expenses and payments, then who owes whom. People who owe money get @mentioned.
+          At most one summary a day: new expenses and payments, then who owes whom. People who owe money get @mentioned.
         </p>
 
         <label className="mt-4 flex min-h-11 cursor-pointer items-center justify-between gap-3">
           <span>
-            <span className="block text-[15px] font-medium">Post automatically</span>
-            <span className="block text-sm text-muted">Each evening (US time), only if something changed.</span>
+            <span className="block text-[15px] font-medium">Notifications</span>
+            <span className="block text-sm text-muted">
+              {!autoDigest
+                ? "Off. Turn on to post a summary automatically."
+                : pausedUntil
+                  ? `Paused until the trip ends on ${formatDay(pausedUntil)}, then a trip wrap-up is posted.`
+                  : "Posted each evening (US time) when something changed."}
+            </span>
           </span>
           <button
             type="button"
@@ -321,6 +358,18 @@ export function DiscordCard({
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             variant="secondary"
+            disabled={busy}
+            onClick={() =>
+              startTransition(async () => {
+                const r = await sendTestDiscordMessage(groupId);
+                setNote(r.error ? { text: r.error, ok: false } : { text: "Test message sent", ok: true });
+              })
+            }
+          >
+            Send test message
+          </Button>
+          <Button
+            variant="secondary"
             disabled={busy || postedRecently}
             onClick={() =>
               startTransition(async () => {
@@ -329,7 +378,7 @@ export function DiscordCard({
               })
             }
           >
-            Post today&apos;s summary now
+            Post summary now
           </Button>
           <Button
             variant="danger"
@@ -367,7 +416,7 @@ export function DiscordCard({
     <Card className="p-4">
       <form action={formAction} className="space-y-3">
         <p className="text-sm text-muted">
-          Post a daily summary to a Discord channel. In Discord:{" "}
+          Post summaries to a Discord channel. The group&apos;s invite link is shared there when you connect. In Discord:{" "}
           <span className="font-medium text-text">Edit Channel → Integrations → Webhooks → New Webhook → Copy Webhook URL</span>,
           then paste it here.
         </p>
@@ -423,4 +472,9 @@ export function DeleteGroupCard({ groupId, groupName }: { groupId: string; group
       {confirmDialog}
     </Card>
   );
+}
+
+/** "2026-10-08" -> "Oct 8", independent of the viewer's time zone. */
+function formatDay(iso: string) {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }

@@ -3,14 +3,15 @@
 import { randomBytes } from "node:crypto";
 import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireMember, requireUser } from "@/lib/authz";
 import { CURRENCY_CODES } from "@/lib/currencies";
 import { findClaimablePlaceholder, LIMITS } from "@/lib/rules";
-import { parseWebhookUrl } from "@/lib/discord";
-import { postGroupDigest } from "@/lib/notify";
+import { automaticPostPlan, connectedMessage, parseWebhookUrl, testMessage } from "@/lib/discord";
+import { appUrl, postGroupDigest, postWebhook } from "@/lib/notify";
 import { normalizeEmail } from "@/lib/users";
 
 export type ActionResult = { error?: string };
@@ -61,7 +62,11 @@ export async function createGroup(_: ActionResult, form: FormData): Promise<Acti
 
 export async function updateGroup(groupId: string, _: ActionResult, form: FormData): Promise<ActionResult> {
   await requireMember(groupId);
-  const parsed = z.object({ name, baseCurrency: currency }).safeParse(Object.fromEntries(form));
+  const optionalDate = z.union([z.literal("").transform(() => null), z.iso.date()]).optional().transform((v) => v ?? null);
+  const parsed = z
+    .object({ name, baseCurrency: currency, tripStart: optionalDate, tripEnd: optionalDate })
+    .refine((g) => !g.tripStart || !g.tripEnd || g.tripStart <= g.tripEnd, { message: "The trip can't end before it starts" })
+    .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   return db.transaction(async (tx) => {
@@ -178,7 +183,7 @@ export type WebhookFormState = { error?: string; connected?: boolean };
 
 /** Connect a Discord channel webhook (owner only). Checks with Discord that it exists first. */
 export async function setDiscordWebhook(groupId: string, _: WebhookFormState, form: FormData): Promise<WebhookFormState> {
-  await requireOwner(groupId);
+  const { group } = await requireOwner(groupId);
   const url = parseWebhookUrl(String(form.get("webhookUrl") ?? ""));
   if (!url) return { error: "Paste a Discord webhook URL (https://discord.com/api/webhooks/…)" };
 
@@ -189,8 +194,14 @@ export async function setDiscordWebhook(groupId: string, _: WebhookFormState, fo
     return { error: "Couldn't reach Discord. Try again in a moment." };
   }
 
-  // No welcome message: the channel gets at most one post a day, and that's the summary.
+  const isNew = url !== group.discordWebhookUrl;
   await db.update(schema.groups).set({ discordWebhookUrl: url }).where(eq(schema.groups.id, groupId));
+  // A newly connected channel gets the invite link so people there can join. This and test
+  // messages don't count towards the one-summary-a-day limit.
+  if (isNew) {
+    const base = appUrl() ?? (await requestOrigin());
+    await postWebhook(url, connectedMessage(group.name, base ? `${base}/join/${group.inviteToken}` : null));
+  }
   refresh();
   return { connected: true };
 }
@@ -208,9 +219,20 @@ export async function setDiscordAutoDigest(groupId: string, enabled: boolean): P
 }
 
 /** Post today's summary now instead of waiting for the automatic one (still once a day). */
+/** Owner's "Send test message": confirms the channel works. Doesn't use up today's summary. */
+export async function sendTestDiscordMessage(groupId: string): Promise<ActionResult> {
+  const { group } = await requireOwner(groupId);
+  if (!group.discordWebhookUrl) return { error: "No Discord channel is connected" };
+  const res = await postWebhook(group.discordWebhookUrl, testMessage(group.name));
+  if (res.ok) return {};
+  return { error: res.status === 404 ? "The webhook was deleted in Discord. Disconnect and add a new one." : "Discord didn't accept the message" };
+}
+
 export async function postDiscordSummaryNow(groupId: string): Promise<ActionResult & { nextAt?: string }> {
-  await requireOwner(groupId);
-  const r = await postGroupDigest(groupId, { skipIfQuiet: false });
+  const { group } = await requireOwner(groupId);
+  // After the trip ends, the first summary is the whole-trip wrap-up.
+  const plan = automaticPostPlan(group.tripEnd, group.discordLastPostedAt, new Date());
+  const r = await postGroupDigest(groupId, { skipIfQuiet: false, mode: plan === "wrap-up" ? "wrap-up" : "daily" });
   refresh();
   if (r.posted) return {};
   switch (r.reason) {
@@ -240,4 +262,12 @@ export async function deleteGroup(groupId: string, confirmName: string): Promise
     await tx.delete(schema.groups).where(eq(schema.groups.id, groupId));
   });
   redirect("/");
+}
+
+/** This request's origin, for links when APP_URL / the Vercel production URL aren't available. */
+async function requestOrigin(): Promise<string | null> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (!host) return null;
+  return `${h.get("x-forwarded-proto") ?? "https"}://${host}`;
 }

@@ -46,6 +46,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
   const data: GroupData = {
     groupId: group.id,
     groupName: group.name,
+    trip: group.tripStart || group.tripEnd ? { start: group.tripStart, end: group.tripEnd } : null,
     base,
     myMemberId: member.id,
     members: members.map((m) => ({

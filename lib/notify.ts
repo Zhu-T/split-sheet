@@ -6,7 +6,7 @@ import { formatMoney } from "./money";
 import { asCurrency, balancesFor, loadExpenses } from "./queries";
 
 /** Public base URL for links in messages: APP_URL if set, else Vercel's production domain. */
-function appUrl(): string | null {
+export function appUrl(): string | null {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   return null;
@@ -40,14 +40,20 @@ export type DigestResult =
  * The day's slot is claimed atomically before posting, so the cron and a manual post can't both
  * go out; if Discord rejects the post the slot is released again.
  */
-export async function postGroupDigest(groupId: string, opts: { skipIfQuiet: boolean }): Promise<DigestResult> {
+export async function postGroupDigest(
+  groupId: string,
+  opts: { skipIfQuiet: boolean; mode?: "daily" | "wrap-up" },
+): Promise<DigestResult> {
   const now = new Date();
+  const wrapUp = opts.mode === "wrap-up";
   const [group] = await db
     .select({
       name: schema.groups.name,
       base: schema.groups.baseCurrency,
       webhook: schema.groups.discordWebhookUrl,
       lastPostedAt: schema.groups.discordLastPostedAt,
+      tripStart: schema.groups.tripStart,
+      tripEnd: schema.groups.tripEnd,
     })
     .from(schema.groups)
     .where(eq(schema.groups.id, groupId));
@@ -56,8 +62,9 @@ export async function postGroupDigest(groupId: string, opts: { skipIfQuiet: bool
   const nextAt = nextPostAllowedAt(group.lastPostedAt, now);
   if (nextAt) return { posted: false, reason: "too-soon", nextAt };
 
-  // Everything that changed since the last summary (or the last day, for the first one).
-  const since = group.lastPostedAt ?? new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  // Daily: everything that changed since the last summary (or the last day, for the first one).
+  // Wrap-up: the whole trip, i.e. every expense in the group.
+  const since = wrapUp ? new Date(0) : (group.lastPostedAt ?? new Date(now.getTime() - 24 * 60 * 60 * 1000));
   const changed = await db
     .select()
     .from(schema.expenses)
@@ -103,6 +110,7 @@ export async function postGroupDigest(groupId: string, opts: { skipIfQuiet: bool
   const isNew = (e: (typeof changed)[number]) => e.createdAt > since && !e.deletedAt;
   const link = appUrl();
   const body = digestMessage({
+    trip: wrapUp && group.tripEnd ? { start: group.tripStart, end: group.tripEnd } : undefined,
     groupName: group.name,
     link: link ? `${link}/groups/${groupId}` : null,
     added: changed
@@ -112,8 +120,8 @@ export async function postGroupDigest(groupId: string, opts: { skipIfQuiet: bool
     payments: changed
       .filter((e) => e.kind === "settlement" && isNew(e))
       .map((e) => ({ from: person(e.payerMemberId), to: person(receiverOf(e.id) ?? ""), amount: formatMoney(e.amountMinor, asCurrency(e.currency)) })),
-    edited: changed.filter((e) => !e.deletedAt && e.createdAt <= since && e.updatedAt > since).length,
-    deleted: changed.filter((e) => e.deletedAt && e.createdAt <= since).length,
+    edited: wrapUp ? 0 : changed.filter((e) => !e.deletedAt && e.createdAt <= since && e.updatedAt > since).length,
+    deleted: wrapUp ? 0 : changed.filter((e) => e.deletedAt && e.createdAt <= since).length,
     owes: transfers.map((t) => ({ from: person(t.from), to: person(t.to), amount: formatMoney(t.amountMinor, base) })),
   });
 

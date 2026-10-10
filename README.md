@@ -9,7 +9,7 @@ A small Splitwise-style app for splitting shared expenses in groups. It runs on 
 - Split equally, by exact amounts or by percentage, in 30 currencies. Exchange rates come from the ECB via Frankfurter and can be edited per expense.
 - Balances, suggested settle-ups and recorded payments.
 - Pay with Venmo from the settle-up screen when the person you owe has added their Venmo username. Venmo has no public API, so this opens a pre-filled payment in the Venmo app (or website), and you record the payment yourself once it's sent. USD only.
-- Discord daily summary: a group owner can connect a channel webhook. At most one message a day is posted, either automatically each evening (Vercel Cron, only if something changed) or with "Post today's summary now". It lists new expenses and payments, then who owes whom, @mentioning people who owe.
+- Discord summaries: a group owner connects a channel webhook; the group's invite link is posted there when a new webhook is connected, and "Send test message" checks it any time. With **Notifications** on, at most one summary a day is posted automatically (Vercel Cron, only if something changed), or the owner can post one now. Groups can have **trip dates**: automatic summaries wait until the trip ends, then a whole-trip wrap-up is posted. Summaries list new expenses and payments, then who owes whom, @mentioning people who owe.
 - A dashboard across all your groups, converted to your home currency.
 - CSV export and "Delete my account".
 - Designed for phones first, and can be installed to the home screen.

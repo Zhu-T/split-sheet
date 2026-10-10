@@ -50,6 +50,13 @@
       "when": 1791607078989,
       "tag": "0006_onboarding_name",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791607860186,
+      "tag": "0007_trip_dates_notifications_toggle",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { digestMessage, escapeMarkdown, mention, nextPostAllowedAt, parseWebhookUrl, type Digest } from "./discord";
+import {
+  automaticPostPlan,
+  connectedMessage,
+  digestMessage,
+  escapeMarkdown,
+  mention,
+  nextPostAllowedAt,
+  parseWebhookUrl,
+  tripEndBoundary,
+  type Digest,
+} from "./discord";
+
+describe("trip schedule", () => {
+  it("treats the end date as finished at the end of that day (UTC)", () => {
+    expect(tripEndBoundary("2026-10-08")).toEqual(new Date("2026-10-09T00:00:00Z"));
+    expect(tripEndBoundary(null)).toBeNull();
+    expect(tripEndBoundary("not a date")).toBeNull();
+  });
+  it("waits during the trip, wraps up once after it, then posts daily", () => {
+    const end = "2026-10-08";
+    expect(automaticPostPlan(end, null, new Date("2026-10-08T20:00:00Z"))).toBe("wait"); // last day
+    expect(automaticPostPlan(end, null, new Date("2026-10-09T01:00:00Z"))).toBe("wrap-up");
+    // A post during the trip (e.g. manual) doesn't count as the wrap-up.
+    expect(automaticPostPlan(end, new Date("2026-10-05T12:00:00Z"), new Date("2026-10-09T01:00:00Z"))).toBe("wrap-up");
+    expect(automaticPostPlan(end, new Date("2026-10-09T01:00:00Z"), new Date("2026-10-10T01:00:00Z"))).toBe("daily");
+    expect(automaticPostPlan(null, null, new Date())).toBe("daily");
+  });
+});
+
+describe("connectedMessage", () => {
+  it("shares the invite link without pinging anyone", () => {
+    const p = connectedMessage("Japan *trip*", "https://split.example/join/abc");
+    expect(p.content).toBe(
+      "👋 This channel is now connected to *Japan \\*trip\\** on Split.\nJoin the group to add and split expenses: <https://split.example/join/abc>",
+    );
+    expect(p.allowed_mentions.users).toEqual([]);
+  });
+});
 
 const ID = "123456789012345678";
 const TOKEN = "a".repeat(68);
@@ -100,5 +137,12 @@ describe("digestMessage", () => {
   it("caps long lists", () => {
     const many = Array.from({ length: 13 }, (_, i) => ({ description: `Item ${i}`, amount: "$1.00", payer: tony }));
     expect(digestMessage({ ...base, added: many }).content).toContain("• …and 3 more");
+  });
+});
+
+describe("trip wrap-up message", () => {
+  it("uses a trip heading with the date range", () => {
+    const p = digestMessage({ trip: { start: "2026-10-01", end: "2026-10-08" }, groupName: "Japan trip", link: null, added: [], payments: [], edited: 0, deleted: 0, owes: [] });
+    expect(p.content.split("\n")[0]).toBe("🏁 **Trip summary** for *Japan trip* (Oct 1 – Oct 8)");
   });
 });

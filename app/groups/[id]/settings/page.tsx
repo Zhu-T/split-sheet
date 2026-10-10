@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PageMotion } from "@/components/motion";
 import { Card, Page, SectionTitle, Skeleton, TopBar, buttonStyles } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
-import { nextPostAllowedAt } from "@/lib/discord";
+import { automaticPostPlan, nextPostAllowedAt } from "@/lib/discord";
 import { loadMembers } from "@/lib/queries";
 import { DeleteGroupCard, DiscordCard, GroupForm, InviteCard, MembersList } from "./settings-forms";
 
@@ -61,11 +61,12 @@ async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "pa
           isOwner={isOwner}
           autoDigest={group.discordAutoDigest}
           nextPostAt={nextPostAllowedAt(group.discordLastPostedAt, new Date())?.toISOString() ?? null}
+          pausedUntil={automaticPostPlan(group.tripEnd, group.discordLastPostedAt, new Date()) === "wait" ? group.tripEnd : null}
         />
 
         <SectionTitle>Group</SectionTitle>
         <Card className="p-4">
-          <GroupForm groupId={id} name={group.name} baseCurrency={group.baseCurrency} />
+          <GroupForm groupId={id} name={group.name} baseCurrency={group.baseCurrency} tripStart={group.tripStart} tripEnd={group.tripEnd} />
         </Card>
 
         <SectionTitle>Your data</SectionTitle>

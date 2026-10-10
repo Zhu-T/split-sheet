@@ -62,7 +62,28 @@ export function nextPostAllowedAt(lastPostedAt: Date | null, now: Date): Date | 
   return next > now ? next : null;
 }
 
+/** The moment a trip is over: the end of its last day (dates are calendar days, in UTC). */
+export function tripEndBoundary(tripEnd: string | null): Date | null {
+  if (!tripEnd || !/^\d{4}-\d{2}-\d{2}$/.test(tripEnd)) return null;
+  return new Date(Date.parse(`${tripEnd}T00:00:00Z`) + 24 * 60 * 60 * 1000);
+}
+
+/**
+ * What the automatic (cron) post should do for a group:
+ * - "wait": the trip hasn't ended, so nothing goes out yet
+ * - "wrap-up": the trip has ended and no summary has been posted since; post one for the whole trip
+ * - "daily": no trip, or the wrap-up is done; post a normal daily summary if something changed
+ */
+export function automaticPostPlan(tripEnd: string | null, lastPostedAt: Date | null, now: Date): "wait" | "wrap-up" | "daily" {
+  const boundary = tripEndBoundary(tripEnd);
+  if (!boundary) return "daily";
+  if (now < boundary) return "wait";
+  return !lastPostedAt || lastPostedAt < boundary ? "wrap-up" : "daily";
+}
+
 export type Digest = {
+  /** Defaults to a daily summary; set for the end-of-trip wrap-up. */
+  trip?: { start: string | null; end: string };
   groupName: string;
   link: string | null;
   added: { description: string; amount: string; payer: Person }[];
@@ -75,14 +96,35 @@ export type Digest = {
 
 const MAX_LISTED = 10;
 
+/** "2026-10-08" -> "Oct 8" (UTC, so the label never shifts a day). */
+function formatDay(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** Posted once when a new webhook is connected, so the channel can join the group. */
+export function connectedMessage(groupName: string, inviteUrl: string | null): WebhookPayload {
+  const lines = [`👋 This channel is now connected to *${escapeMarkdown(groupName)}* on Split.`];
+  if (inviteUrl) lines.push(`Join the group to add and split expenses: <${inviteUrl}>`);
+  return payload(lines, []);
+}
+
+export function testMessage(groupName: string): WebhookPayload {
+  return payload([`✅ Test message: this channel is connected to *${escapeMarkdown(groupName)}*.`], []);
+}
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** One daily summary: what changed since the last post, then who owes whom (with pings). */
 export function digestMessage(d: Digest): WebhookPayload {
-  const lines = [`📊 **Daily summary** for *${escapeMarkdown(d.groupName)}*`];
+  const group = `*${escapeMarkdown(d.groupName)}*`;
+  const lines = [
+    d.trip
+      ? `🏁 **Trip summary** for ${group} (${d.trip.start ? `${formatDay(d.trip.start)} – ` : "ended "}${formatDay(d.trip.end)})`
+      : `📊 **Daily summary** for ${group}`,
+  ];
 
   if (d.added.length + d.payments.length + d.edited + d.deleted === 0) {
-    lines.push("No changes since the last summary.");
+    lines.push(d.trip ? "No expenses were added." : "No changes since the last summary.");
   }
   if (d.added.length) {
     lines.push("", `🧾 ${plural(d.added.length, "new expense")}:`);
