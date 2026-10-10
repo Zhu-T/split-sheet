@@ -18,13 +18,17 @@ export function PeoplePanel({ people, home }: { people: PersonSummary[]; home: C
               <Initials name={p.name} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{p.name}</p>
-                <ul className="mt-0.5 space-y-0.5 text-xs text-muted">
+                <ul className="mt-0.5 text-xs text-muted">
                   {p.groups.map((g) => (
-                    <li key={g.groupId} className="flex justify-between gap-2">
-                      <Link href={`/groups/${g.groupId}`} transitionTypes={["nav-forward"]} className="min-w-0 truncate hover:underline">
-                        {g.groupName}
+                    <li key={g.groupId}>
+                      <Link
+                        href={`/groups/${g.groupId}`}
+                        transitionTypes={["nav-forward"]}
+                        className="-mx-2 flex min-h-10 items-center justify-between gap-2 rounded-lg px-2 transition-colors hover:bg-surface-2/60 active:bg-surface-2"
+                      >
+                        <span className="min-w-0 truncate">{g.groupName}</span>
+                        <Money minor={g.amountMinor} currency={g.currency} signed className="shrink-0" />
                       </Link>
-                      <Money minor={g.amountMinor} currency={g.currency} signed />
                     </li>
                   ))}
                 </ul>

@@ -32,9 +32,22 @@ async function requireOwner(groupId: string) {
   return ctx;
 }
 
+const endNotBeforeStart = (g: { tripStart: string | null; tripEnd: string | null }) =>
+  !g.tripStart || !g.tripEnd || g.tripStart <= g.tripEnd;
+const END_BEFORE_START = { message: "The trip can't end before it starts" };
+
 export async function createGroup(_: ActionResult, form: FormData): Promise<ActionResult> {
   const user = await requireUser();
-  const parsed = z.object({ name, baseCurrency: currency }).safeParse(Object.fromEntries(form));
+  // Trip dates are required for new groups (they drive when Discord summaries go out).
+  const parsed = z
+    .object({
+      name,
+      baseCurrency: currency,
+      tripStart: z.iso.date("Pick the date the trip starts"),
+      tripEnd: z.iso.date("Pick the date the trip ends"),
+    })
+    .refine(endNotBeforeStart, END_BEFORE_START)
+    .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const [{ n }] = await db
@@ -65,7 +78,7 @@ export async function updateGroup(groupId: string, _: ActionResult, form: FormDa
   const optionalDate = z.union([z.literal("").transform(() => null), z.iso.date()]).optional().transform((v) => v ?? null);
   const parsed = z
     .object({ name, baseCurrency: currency, tripStart: optionalDate, tripEnd: optionalDate })
-    .refine((g) => !g.tripStart || !g.tripEnd || g.tripStart <= g.tripEnd, { message: "The trip can't end before it starts" })
+    .refine(endNotBeforeStart, END_BEFORE_START)
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 

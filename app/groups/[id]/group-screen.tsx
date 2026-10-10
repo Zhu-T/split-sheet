@@ -113,7 +113,7 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
       <div className="min-w-0">
         {justCreated && data.expenses.length === 0 && (
           <Card className="rise mb-4 px-4 py-3 text-sm">
-            Group created. Invite people from <span className="font-semibold">Members</span> (top right), or add an expense.
+            Group created. Invite people from <span className="font-semibold">group settings</span> (the gear, top right), or add an expense.
           </Card>
         )}
 
@@ -451,11 +451,21 @@ function ExpenseRow({
           <span className="block truncate font-medium">
             {settlement ? `${nameOf(e.payerId)} paid ${nameOf(e.splits[0]?.memberId ?? "")}` : e.description}
           </span>
+          {/* Amount first, so on narrow screens only the payer's name gets truncated, never the money. */}
           <span className="block truncate text-sm text-muted">
-            {settlement ? "Payment" : `${nameOf(e.payerId)} paid `}
-            {!settlement && <Money minor={e.amountMinor} currency={e.currency} />}
-            {e.currency !== data.base && (
-              <> · ≈ <Money minor={convert(e.amountMinor, e.currency, data.base, e.fxRate)} currency={data.base} /></>
+            {settlement ? (
+              "Payment"
+            ) : (
+              <>
+                <Money minor={e.amountMinor} currency={e.currency} />
+                {e.currency !== data.base && (
+                  <span className="hidden min-[400px]:inline">
+                    {" ≈ "}
+                    <Money minor={convert(e.amountMinor, e.currency, data.base, e.fxRate)} currency={data.base} />
+                  </span>
+                )}
+                {` · paid by ${nameOf(e.payerId)}`}
+              </>
             )}
           </span>
         </span>

@@ -18,6 +18,7 @@ import {
 } from "@/app/actions/groups";
 import { useConfirm } from "@/components/confirm";
 import { CurrencySelect } from "@/components/currency-select";
+import { DateRangeField } from "@/components/date-range";
 import { Sheet } from "@/components/sheet";
 import { Button, Card, ErrorText, Field, Initials, cx, inputClass } from "@/components/ui";
 
@@ -251,20 +252,12 @@ export function GroupForm({
       <Field label="Currency">
         <CurrencySelect name="baseCurrency" defaultValue={baseCurrency} />
       </Field>
-      <fieldset>
-        <legend className="mb-1 text-sm font-medium text-muted">Trip dates (optional)</legend>
-        <div className="grid grid-cols-2 gap-3">
-          <label>
-            <span className="sr-only">Start date</span>
-            <input type="date" name="tripStart" defaultValue={tripStart ?? ""} aria-label="Trip start" className={inputClass} />
-          </label>
-          <label>
-            <span className="sr-only">End date</span>
-            <input type="date" name="tripEnd" defaultValue={tripEnd ?? ""} aria-label="Trip end" className={inputClass} />
-          </label>
-        </div>
-        <p className="mt-1 text-sm text-muted">Discord summaries wait until the trip ends, then post a wrap-up.</p>
-      </fieldset>
+      <DateRangeField
+        label="Trip dates"
+        defaultStart={tripStart ?? ""}
+        defaultEnd={tripEnd ?? ""}
+        hint="Discord summaries wait until the trip ends, then post a wrap-up."
+      />
       <ErrorText>{state.error}</ErrorText>
       <Button variant="secondary" disabled={pending}>
         {pending ? "Saving…" : "Save changes"}
@@ -340,18 +333,17 @@ export function DiscordCard({
             aria-checked={autoDigest}
             disabled={busy}
             onClick={() => startTransition(() => setDiscordAutoDigest(groupId, !autoDigest))}
-            className={cx(
-              "relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200",
-              autoDigest ? "bg-accent" : "bg-line",
-            )}
+            className="-mr-1 grid h-11 w-14 shrink-0 place-items-center rounded-full"
           >
-            <span
-              aria-hidden
-              className={cx(
-                "absolute top-1 left-1 size-5 rounded-full bg-surface shadow transition-transform duration-200",
-                autoDigest && "translate-x-5",
-              )}
-            />
+            {/* The visible track is smaller than the 44px tap area around it. */}
+            <span aria-hidden className={cx("relative h-7 w-12 rounded-full transition-colors duration-200", autoDigest ? "bg-accent" : "bg-line")}>
+              <span
+                className={cx(
+                  "absolute top-1 left-1 size-5 rounded-full bg-surface shadow transition-transform duration-200",
+                  autoDigest && "translate-x-5",
+                )}
+              />
+            </span>
           </button>
         </label>
 

@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { CountUp } from "@/components/count-up";
 import { PageMotion } from "@/components/motion";
 import { PeoplePanel } from "@/components/people-panel";
-import { Card, Initials, Money, Page, Skeleton, TopBar } from "@/components/ui";
+import { Card, Initials, Money, Page, SettingsIcon, Skeleton, TopBar } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
 import { isCurrency, type Currency } from "@/lib/currencies";
 import { getRates } from "@/lib/fx";
@@ -20,10 +20,7 @@ export default function DashboardPage() {
         title="Split"
         action={
           <Link href="/settings" transitionTypes={["nav-forward"]} aria-label="Settings" className="-mr-2 grid size-11 place-items-center rounded-full text-muted transition active:scale-90">
-            <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
+            <SettingsIcon />
           </Link>
         }
       />

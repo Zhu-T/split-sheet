@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createGroup } from "@/app/actions/groups";
 import { CurrencySelect } from "@/components/currency-select";
+import { DateRangeField } from "@/components/date-range";
 import { Sheet } from "@/components/sheet";
 import { Button, ErrorText, Field, inputClass } from "@/components/ui";
 
@@ -29,6 +30,7 @@ export function NewGroupButton({ homeCurrency, variant = "primary" }: { homeCurr
           <Field label="Name">
             <input name="name" required maxLength={60} autoComplete="off" placeholder="Roommates, Japan trip…" className={inputClass} />
           </Field>
+          <DateRangeField label="Trip dates" required hint="Discord summaries wait until the trip ends." />
           <Field label="Currency" hint="Balances are shown in this currency. It can't change once there are expenses.">
             <CurrencySelect name="baseCurrency" defaultValue={homeCurrency} />
           </Field>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageMotion } from "@/components/motion";
-import { Card, Initials, Page, Skeleton, TopBar, cx } from "@/components/ui";
+import { Card, Initials, Page, SettingsIcon, Skeleton, TopBar, cx } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
 import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRates } from "@/lib/fx";
@@ -85,13 +85,10 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
           <Link
             href={`/groups/${group.id}/settings`}
             transitionTypes={["nav-forward"]}
-            aria-label="Members and group settings"
+            aria-label="Group settings"
             className="-mr-2 grid size-11 place-items-center rounded-full text-muted transition active:scale-90"
           >
-            <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <circle cx="9" cy="8" r="3.5" />
-              <path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.6.8 2.6 2.6 3 5.2" />
-            </svg>
+            <SettingsIcon />
           </Link>
         }
       />
