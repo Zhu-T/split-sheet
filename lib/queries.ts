@@ -18,8 +18,10 @@ export function loadMembers(groupId: string) {
       role: schema.members.role,
       active: schema.members.active,
       joinedAt: schema.members.joinedAt,
+      venmoUsername: schema.users.venmoUsername,
     })
     .from(schema.members)
+    .leftJoin(schema.users, eq(schema.users.id, schema.members.userId))
     .where(eq(schema.members.groupId, groupId))
     .orderBy(asc(schema.members.joinedAt));
 }

@@ -7,7 +7,7 @@ import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { hasAccess } from "./rules";
 
-export type CurrentUser = { id: string; email: string; name: string; homeCurrency: string };
+export type CurrentUser = { id: string; email: string; name: string; homeCurrency: string; venmoUsername: string | null };
 
 /** The signed-in user, loaded fresh from the database (so deleted accounts are rejected). */
 export const requireUser = cache(async (): Promise<CurrentUser> => {
@@ -20,6 +20,7 @@ export const requireUser = cache(async (): Promise<CurrentUser> => {
       email: schema.users.email,
       name: schema.users.name,
       homeCurrency: schema.users.homeCurrency,
+      venmoUsername: schema.users.venmoUsername,
     })
     .from(schema.users)
     .where(eq(schema.users.id, id));

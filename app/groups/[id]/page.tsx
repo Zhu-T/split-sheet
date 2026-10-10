@@ -45,6 +45,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
 
   const data: GroupData = {
     groupId: group.id,
+    groupName: group.name,
     base,
     myMemberId: member.id,
     members: members.map((m) => ({
@@ -52,6 +53,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
       name: m.displayName,
       active: m.active,
       placeholder: m.userId === null,
+      venmo: m.venmoUsername,
       joinedAt: m.userId ? m.joinedAt.toISOString() : null, // shown as "X joined" in activity
     })),
     expenses: expenses.map((e) => ({

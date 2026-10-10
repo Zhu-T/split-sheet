@@ -5,6 +5,7 @@ import { PageMotion } from "@/components/motion";
 import { Button, Card, Field, Page, SectionTitle, Skeleton, TopBar } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
 import { DeleteAccountButton } from "./delete-account-button";
+import { VenmoForm } from "./venmo-form";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -33,6 +34,11 @@ async function Settings() {
         </form>
       </Card>
 
+      <SectionTitle>Getting paid</SectionTitle>
+      <Card className="p-4">
+        <VenmoForm current={user.venmoUsername} />
+      </Card>
+
       <SectionTitle>Home currency</SectionTitle>
       <Card className="p-4">
         <form action={setHomeCurrency} className="space-y-3">
@@ -46,8 +52,8 @@ async function Settings() {
       <SectionTitle>Privacy</SectionTitle>
       <Card className="p-4">
         <p className="text-sm text-muted">
-          We store only your name and email. Deleting your account removes both; your past expenses stay in your groups
-          under your name so everyone&apos;s balances remain correct.
+          We store only your name, your email and, if you add it, your Venmo username. Deleting your account removes all
+          three; your past expenses stay in your groups under your name so everyone&apos;s balances remain correct.
         </p>
         <DeleteAccountButton />
       </Card>

@@ -8,6 +8,7 @@ import { db, schema } from "@/db";
 import { requireUser } from "@/lib/authz";
 import { CURRENCY_CODES } from "@/lib/currencies";
 import { safeRedirectPath } from "@/lib/rules";
+import { parseVenmoUsername } from "@/lib/venmo";
 
 export async function signInWithGoogle(form: FormData) {
   await signIn("google", { redirectTo: safeRedirectPath(form.get("next")?.toString()) });
@@ -23,6 +24,20 @@ export async function setHomeCurrency(form: FormData) {
   if (!parsed.success) return;
   await db.update(schema.users).set({ homeCurrency: parsed.data }).where(eq(schema.users.id, user.id));
   refresh();
+}
+
+export type VenmoFormState = { error?: string; saved?: boolean };
+
+export async function setVenmoUsername(_: VenmoFormState, form: FormData): Promise<VenmoFormState> {
+  const user = await requireUser();
+  const raw = String(form.get("venmoUsername") ?? "");
+  const venmoUsername = raw.trim() === "" ? null : parseVenmoUsername(raw);
+  if (raw.trim() !== "" && !venmoUsername) {
+    return { error: "Venmo usernames are 5–30 letters, numbers, hyphens or underscores" };
+  }
+  await db.update(schema.users).set({ venmoUsername }).where(eq(schema.users.id, user.id));
+  refresh();
+  return { saved: true };
 }
 
 /**

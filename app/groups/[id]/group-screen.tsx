@@ -11,7 +11,14 @@ import type { SplitType } from "@/lib/split";
 import { ExpenseSheet } from "./expense-sheet";
 import { SettleSheet } from "./settle-sheet";
 
-export type MemberView = { id: string; name: string; active: boolean; placeholder: boolean; joinedAt: string | null };
+export type MemberView = {
+  id: string;
+  name: string;
+  active: boolean;
+  placeholder: boolean;
+  joinedAt: string | null;
+  venmo: string | null;
+};
 
 export type ExpenseView = {
   id: string;
@@ -29,6 +36,7 @@ export type ExpenseView = {
 
 export type GroupData = {
   groupId: string;
+  groupName: string;
   base: Currency;
   myMemberId: string;
   members: MemberView[];

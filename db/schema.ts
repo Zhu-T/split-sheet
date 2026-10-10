@@ -24,6 +24,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(), // always lowercased
   name: text("name").notNull(),
   homeCurrency: text("home_currency").notNull().default("USD"),
+  venmoUsername: text("venmo_username"), // optional; shown to people in your groups so they can pay you
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
