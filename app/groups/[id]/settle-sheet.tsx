@@ -146,7 +146,7 @@ export function SettleSheet({
           {from === to && <p className="text-sm text-muted">Pick two different people.</p>}
         {data.requireConfirmation && to && from !== to && to !== data.myMemberId && (
           <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">
-            {label(to)} will be asked to confirm they received it before balances update.
+            It counts straight away. {label(to)} will be asked to confirm they received it.
           </p>
         )}
           <ErrorText>{error}</ErrorText>

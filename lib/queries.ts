@@ -4,7 +4,6 @@ import { db, schema } from "@/db";
 import { computeBalances, type LedgerEntry } from "./balances";
 import { isCurrency, type Currency } from "./currencies";
 import { myDebts, type Counterpart } from "./people";
-import { isPendingPayment } from "./rules";
 import { simplifyDebts } from "./simplify";
 
 export type GroupMemberRow = Awaited<ReturnType<typeof loadMembers>>[number];
@@ -58,8 +57,8 @@ export function asCurrency(code: string): Currency {
 }
 
 export function balancesFor(expenses: ExpenseRow[], base: Currency) {
-  // Payments still waiting for the recipient to confirm don't move balances yet.
-  const entries: LedgerEntry[] = expenses.filter((e) => !isPendingPayment(e)).map((e) => ({
+  // Every payment counts as soon as it's recorded, including ones awaiting confirmation.
+  const entries: LedgerEntry[] = expenses.map((e) => ({
     payerMemberId: e.payerMemberId,
     amountMinor: e.amountMinor,
     currency: e.currency,

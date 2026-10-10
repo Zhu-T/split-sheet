@@ -485,8 +485,8 @@ function ExpenseRow({
           {settlement ? (
             e.pending ? (
               <>
-                <span className="block text-xs font-medium text-muted">pending</span>
-                <Money minor={e.amountMinor} currency={e.currency} className="font-semibold text-muted" />
+                <span className="block text-xs font-medium text-muted">unconfirmed</span>
+                <Money minor={e.amountMinor} currency={e.currency} className="font-semibold" />
               </>
             ) : (
               <Money minor={e.amountMinor} currency={e.currency} className="font-semibold" />
@@ -537,7 +537,9 @@ function PendingForMe({
   return (
     <Card className="rise mb-4 border-accent/40 p-4">
       <h2 className="font-semibold">Confirm payments</h2>
-      <p className="mt-0.5 text-sm text-muted">These count towards balances once you confirm you received them.</p>
+      <p className="mt-0.5 text-sm text-muted">
+        These already count towards balances. Confirm you received them, or mark one as not received to undo it.
+      </p>
       <ul className="mt-3 space-y-3">
         {pending.map((e) => (
           <li key={e.id} className="space-y-2">
@@ -553,7 +555,7 @@ function PendingForMe({
                 onClick={async () => {
                   const ok = await confirm({
                     title: "Payment not received?",
-                    message: `This removes the payment ${nameOf(e.payerId)} recorded. Balances stay as they were.`,
+                    message: `This removes the payment ${nameOf(e.payerId)} recorded, and balances go back to how they were before it.`,
                     confirmLabel: "Remove payment",
                     destructive: true,
                   });

@@ -86,8 +86,8 @@ export const expenses = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
-    // Payments only: when the person being paid confirmed it. A payment without this doesn't
-    // count towards balances yet (only possible while the group requires confirmation).
+    // Payments only: when the person being paid confirmed it. Unconfirmed payments still count
+    // towards balances; this only records that the recipient checked it (when the group asks).
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   },
   (t) => [index("expenses_group_date_idx").on(t.groupId, t.date)],

@@ -476,7 +476,7 @@ function formatDay(iso: string) {
 export function PaymentsCard({ groupId, requireConfirmation, isOwner }: { groupId: string; requireConfirmation: boolean; isOwner: boolean }) {
   const [busy, startTransition] = useTransition();
   const description = requireConfirmation
-    ? "When someone records a payment, the person being paid confirms it before balances update."
+    ? "Payments count straight away, and the person being paid is asked to confirm they received them. Marking one as not received undoes it."
     : "Payments count as soon as they're recorded.";
 
   if (!isOwner) {

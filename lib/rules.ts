@@ -61,7 +61,7 @@ export function cleanDisplayName(input: unknown): string | null {
   return name.length >= 1 && name.length <= 60 ? name : null;
 }
 
-/** A payment waiting for the person being paid to confirm it. It doesn't count towards balances yet. */
+/** A payment the person being paid hasn't confirmed yet. It already counts towards balances. */
 export function isPendingPayment(e: { kind: "expense" | "settlement"; confirmedAt: Date | string | null }): boolean {
   return e.kind === "settlement" && !e.confirmedAt;
 }

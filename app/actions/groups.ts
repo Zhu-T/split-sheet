@@ -287,7 +287,7 @@ async function requestOrigin(): Promise<string | null> {
 
 /**
  * Owner: whether payments must be confirmed by the person being paid. Turning it off confirms
- * anything still pending, so no payment is left stuck outside the balances.
+ * anything still pending, so no payment is left waiting for a check nobody is asked for.
  */
 export async function setRequirePaymentConfirmation(groupId: string, enabled: boolean): Promise<void> {
   await requireOwner(groupId);
