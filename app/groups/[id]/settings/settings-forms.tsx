@@ -11,6 +11,7 @@ import {
   sendTestDiscordMessage,
   setDiscordAutoDigest,
   setDiscordWebhook,
+  setRequirePaymentConfirmation,
   setMemberActive,
   updateGroup,
   updateMember,
@@ -469,4 +470,47 @@ export function DeleteGroupCard({ groupId, groupName }: { groupId: string; group
 /** "2026-10-08" -> "Oct 8", independent of the viewer's time zone. */
 function formatDay(iso: string) {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** Owner switch: payments wait for the person being paid to confirm them. */
+export function PaymentsCard({ groupId, requireConfirmation, isOwner }: { groupId: string; requireConfirmation: boolean; isOwner: boolean }) {
+  const [busy, startTransition] = useTransition();
+  const description = requireConfirmation
+    ? "When someone records a payment, the person being paid confirms it before balances update."
+    : "Payments count as soon as they're recorded.";
+
+  if (!isOwner) {
+    return (
+      <Card className="p-4">
+        <p className="text-sm text-muted">{description} Only the group owner can change this.</p>
+      </Card>
+    );
+  }
+  return (
+    <Card className="p-4">
+      <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3">
+        <span>
+          <span className="block text-[15px] font-medium">Ask the person being paid to confirm</span>
+          <span className="block text-sm text-muted">{description}</span>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={requireConfirmation}
+          disabled={busy}
+          onClick={() => startTransition(() => setRequirePaymentConfirmation(groupId, !requireConfirmation))}
+          className="-mr-1 grid h-11 w-14 shrink-0 place-items-center rounded-full"
+        >
+          <span aria-hidden className={cx("relative h-7 w-12 rounded-full transition-colors duration-200", requireConfirmation ? "bg-accent" : "bg-line")}>
+            <span
+              className={cx(
+                "absolute top-1 left-1 size-5 rounded-full bg-surface shadow transition-transform duration-200",
+                requireConfirmation && "translate-x-5",
+              )}
+            />
+          </span>
+        </button>
+      </label>
+    </Card>
+  );
 }

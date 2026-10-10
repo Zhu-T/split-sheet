@@ -9,7 +9,7 @@ import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRate } from "@/lib/fx";
 import { decimals, parseAmount } from "@/lib/money";
 import { asCurrency } from "@/lib/queries";
-import { LIMITS, membersBelongToGroup } from "@/lib/rules";
+import { LIMITS, membersBelongToGroup, paymentConfirmedOnSave } from "@/lib/rules";
 import { computeShares, SPLIT_TYPES, type SplitInput, type SplitType } from "@/lib/split";
 import type { ActionResult } from "./groups";
 
@@ -92,6 +92,13 @@ export async function saveExpense(groupId: string, raw: ExpenseInput): Promise<A
     fxRate,
     splitType: input.splitType,
     updatedAt: now,
+    // Payments in a group that asks for confirmation wait for the recipient, unless they
+    // recorded it themselves. (Re-checked on every edit, so changing a payment re-asks.)
+    confirmedAt:
+      input.kind === "settlement" &&
+      paymentConfirmedOnSave(group.requirePaymentConfirmation, me.id, input.splits[0].memberId)
+        ? now
+        : null,
   };
   const inputById = new Map(splitInputs.map((s) => [s.memberId, s.value]));
   const splitRows = (expenseId: string) =>
@@ -154,6 +161,33 @@ export async function deleteExpense(groupId: string, expenseId: string): Promise
     .update(schema.expenses)
     .set({ deletedAt: now, updatedAt: now })
     .where(and(eq(schema.expenses.id, expenseId), eq(schema.expenses.groupId, groupId), isNull(schema.expenses.deletedAt)));
+  refresh();
+  return {};
+}
+
+/** The person being paid confirms they received a payment, so it now counts towards balances. */
+export async function confirmPayment(groupId: string, expenseId: string): Promise<ActionResult> {
+  const { member: me } = await requireMember(groupId);
+  if (!z.uuid().safeParse(expenseId).success) return { error: "Unknown payment" };
+  const [receiver] = await db
+    .select({ memberId: schema.expenseSplits.memberId })
+    .from(schema.expenseSplits)
+    .innerJoin(schema.expenses, eq(schema.expenses.id, schema.expenseSplits.expenseId))
+    .where(
+      and(
+        eq(schema.expenses.id, expenseId),
+        eq(schema.expenses.groupId, groupId),
+        eq(schema.expenses.kind, "settlement"),
+        isNull(schema.expenses.deletedAt),
+      ),
+    );
+  if (!receiver) return { error: "This payment no longer exists" };
+  // Only the person who received the money can confirm it.
+  if (receiver.memberId !== me.id) return { error: "Only the person being paid can confirm this" };
+  await db
+    .update(schema.expenses)
+    .set({ confirmedAt: new Date() })
+    .where(and(eq(schema.expenses.id, expenseId), isNull(schema.expenses.confirmedAt)));
   refresh();
   return {};
 }

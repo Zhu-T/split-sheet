@@ -284,3 +284,21 @@ async function requestOrigin(): Promise<string | null> {
   if (!host) return null;
   return `${h.get("x-forwarded-proto") ?? "https"}://${host}`;
 }
+
+/**
+ * Owner: whether payments must be confirmed by the person being paid. Turning it off confirms
+ * anything still pending, so no payment is left stuck outside the balances.
+ */
+export async function setRequirePaymentConfirmation(groupId: string, enabled: boolean): Promise<void> {
+  await requireOwner(groupId);
+  await db.transaction(async (tx) => {
+    await tx.update(schema.groups).set({ requirePaymentConfirmation: enabled }).where(eq(schema.groups.id, groupId));
+    if (!enabled) {
+      await tx
+        .update(schema.expenses)
+        .set({ confirmedAt: new Date() })
+        .where(and(eq(schema.expenses.groupId, groupId), eq(schema.expenses.kind, "settlement"), isNull(schema.expenses.confirmedAt)));
+    }
+  });
+  refresh();
+}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PageMotion } from "@/components/motion";
 import { Card, Initials, Page, SettingsIcon, Skeleton, TopBar, cx } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
+import { isPendingPayment } from "@/lib/rules";
 import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRates } from "@/lib/fx";
 import { asCurrency, balancesFor, loadExpenses, loadGroupNav, loadMembers } from "@/lib/queries";
@@ -46,6 +47,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
   const data: GroupData = {
     groupId: group.id,
     groupName: group.name,
+    requireConfirmation: group.requirePaymentConfirmation,
     trip: group.tripStart || group.tripEnd ? { start: group.tripStart, end: group.tripEnd } : null,
     base,
     myMemberId: member.id,
@@ -68,6 +70,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
       fxRate: e.fxRate,
       splitType: e.splitType,
       updatedAt: e.updatedAt.toISOString(),
+      pending: isPendingPayment(e),
       splits: e.splits,
     })),
     balances: Object.fromEntries(balances),

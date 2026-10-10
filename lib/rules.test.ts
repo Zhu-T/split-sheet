@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { cleanDisplayName, findClaimablePlaceholder, hasAccess, membersBelongToGroup, safeRedirectPath } from "./rules";
+import {
+  cleanDisplayName,
+  findClaimablePlaceholder,
+  hasAccess,
+  isPendingPayment,
+  membersBelongToGroup,
+  paymentConfirmedOnSave,
+  safeRedirectPath,
+} from "./rules";
 
 describe("hasAccess", () => {
   it("allows only active memberships", () => {
@@ -62,5 +70,20 @@ describe("cleanDisplayName", () => {
     expect(cleanDisplayName(null)).toBeNull();
     expect(cleanDisplayName("a".repeat(61))).toBeNull();
     expect(cleanDisplayName("a".repeat(60))).toBe("a".repeat(60));
+  });
+});
+
+describe("payment confirmation", () => {
+  it("counts payments straight away unless the group asks for confirmation", () => {
+    expect(paymentConfirmedOnSave(false, "payer", "receiver")).toBe(true);
+  });
+  it("waits for the receiver when the payer records it in a confirming group", () => {
+    expect(paymentConfirmedOnSave(true, "payer", "receiver")).toBe(false);
+    expect(paymentConfirmedOnSave(true, "receiver", "receiver")).toBe(true); // receiver recorded it themselves
+  });
+  it("treats only unconfirmed payments as pending", () => {
+    expect(isPendingPayment({ kind: "settlement", confirmedAt: null })).toBe(true);
+    expect(isPendingPayment({ kind: "settlement", confirmedAt: new Date() })).toBe(false);
+    expect(isPendingPayment({ kind: "expense", confirmedAt: null })).toBe(false);
   });
 });

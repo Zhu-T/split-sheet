@@ -60,3 +60,16 @@ export function cleanDisplayName(input: unknown): string | null {
   const name = String(input ?? "").replace(/\s+/g, " ").trim();
   return name.length >= 1 && name.length <= 60 ? name : null;
 }
+
+/** A payment waiting for the person being paid to confirm it. It doesn't count towards balances yet. */
+export function isPendingPayment(e: { kind: "expense" | "settlement"; confirmedAt: Date | string | null }): boolean {
+  return e.kind === "settlement" && !e.confirmedAt;
+}
+
+/**
+ * Whether a payment being recorded (or edited) counts straight away. Only when the group asks
+ * for confirmation and someone other than the person being paid records it does it wait.
+ */
+export function paymentConfirmedOnSave(requireConfirmation: boolean, recorderMemberId: string, receiverMemberId: string): boolean {
+  return !requireConfirmation || recorderMemberId === receiverMemberId;
+}

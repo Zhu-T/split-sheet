@@ -118,7 +118,7 @@ export async function postGroupDigest(
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
       .map((e) => ({ description: e.description, amount: formatMoney(e.amountMinor, asCurrency(e.currency)), payer: person(e.payerMemberId) })),
     payments: changed
-      .filter((e) => e.kind === "settlement" && isNew(e))
+      .filter((e) => e.kind === "settlement" && isNew(e) && e.confirmedAt)
       .map((e) => ({ from: person(e.payerMemberId), to: person(receiverOf(e.id) ?? ""), amount: formatMoney(e.amountMinor, asCurrency(e.currency)) })),
     edited: wrapUp ? 0 : changed.filter((e) => !e.deletedAt && e.createdAt <= since && e.updatedAt > since).length,
     deleted: wrapUp ? 0 : changed.filter((e) => e.deletedAt && e.createdAt <= since).length,

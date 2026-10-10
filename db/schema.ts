@@ -44,6 +44,8 @@ export const groups = pgTable("groups", {
   // notifications toggle (off until turned on; only automatic posts depend on it).
   discordLastPostedAt: timestamp("discord_last_posted_at", { withTimezone: true }),
   discordAutoDigest: boolean("discord_auto_digest").notNull().default(false),
+  // Optional: payments recorded by the payer wait for the person being paid to confirm them.
+  requirePaymentConfirmation: boolean("require_payment_confirmation").notNull().default(false),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -84,6 +86,9 @@ export const expenses = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // Payments only: when the person being paid confirmed it. A payment without this doesn't
+    // count towards balances yet (only possible while the group requires confirmation).
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   },
   (t) => [index("expenses_group_date_idx").on(t.groupId, t.date)],
 );

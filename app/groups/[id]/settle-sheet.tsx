@@ -57,6 +57,7 @@ export function SettleSheet({
         splits: [{ memberId: to, value: amount }],
       });
       if (result.error) setError(result.error);
+      else if (data.requireConfirmation && to !== data.myMemberId) onDone(`Payment recorded · waiting for ${label(to)} to confirm`);
       else onDone(existing ? "Payment updated" : "Payment recorded");
     });
   }
@@ -143,6 +144,11 @@ export function SettleSheet({
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
           </Field>
           {from === to && <p className="text-sm text-muted">Pick two different people.</p>}
+        {data.requireConfirmation && to && from !== to && to !== data.myMemberId && (
+          <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">
+            {label(to)} will be asked to confirm they received it before balances update.
+          </p>
+        )}
           <ErrorText>{error}</ErrorText>
           {/* Kept apart from the primary action so it can't be tapped by accident. */}
           {existing && (

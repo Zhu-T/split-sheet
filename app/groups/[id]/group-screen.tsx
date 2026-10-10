@@ -1,7 +1,9 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useTransition, type CSSProperties, type ReactNode } from "react";
+import { confirmPayment, deleteExpense } from "@/app/actions/expenses";
+import { useConfirm } from "@/components/confirm";
 import { CountUp } from "@/components/count-up";
 import { Button, Card, Initials, Money, SectionTitle, cx, inputClass } from "@/components/ui";
 import type { Currency } from "@/lib/currencies";
@@ -31,12 +33,16 @@ export type ExpenseView = {
   fxRate: number;
   splitType: SplitType;
   updatedAt: string;
+  /** A payment waiting for the person being paid to confirm it (not in balances yet). */
+  pending: boolean;
   splits: { memberId: string; shareMinor: number; input: number }[];
 };
 
 export type GroupData = {
   groupId: string;
   groupName: string;
+  /** Payments recorded by the payer wait for the recipient to confirm them. */
+  requireConfirmation: boolean;
   trip: { start: string | null; end: string | null } | null;
   base: Currency;
   myMemberId: string;
@@ -116,6 +122,8 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
             Group created. Invite people from <span className="font-semibold">group settings</span> (the gear, top right), or add an expense.
           </Card>
         )}
+
+        <PendingForMe data={data} nameOf={nameOf} onDone={done} />
 
         {/* Hierarchy: the one number that matters comes first and largest. */}
         <Card className="rise px-5 py-5">
@@ -454,7 +462,11 @@ function ExpenseRow({
           {/* Amount first, so on narrow screens only the payer's name gets truncated, never the money. */}
           <span className="block truncate text-sm text-muted">
             {settlement ? (
-              "Payment"
+              e.pending ? (
+                e.splits[0]?.memberId === data.myMemberId ? "Waiting for you to confirm" : `Waiting for ${nameOf(e.splits[0]?.memberId ?? "")} to confirm`
+              ) : (
+                "Payment"
+              )
             ) : (
               <>
                 <Money minor={e.amountMinor} currency={e.currency} />
@@ -471,7 +483,14 @@ function ExpenseRow({
         </span>
         <span className="shrink-0 text-right text-sm">
           {settlement ? (
-            <Money minor={e.amountMinor} currency={e.currency} className="font-semibold" />
+            e.pending ? (
+              <>
+                <span className="block text-xs font-medium text-muted">pending</span>
+                <Money minor={e.amountMinor} currency={e.currency} className="font-semibold text-muted" />
+              </>
+            ) : (
+              <Money minor={e.amountMinor} currency={e.currency} className="font-semibold" />
+            )
           ) : myEffect === 0 ? (
             <span className="text-muted">{myShare === 0 && e.payerId !== me ? "not involved" : "even"}</span>
           ) : (
@@ -498,4 +517,71 @@ function tripLabel(trip: { start: string | null; end: string | null }) {
   const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   if (trip.start && trip.end) return `${day(trip.start)} – ${day(trip.end)}`;
   return trip.start ? `From ${day(trip.start)}` : `Until ${day(trip.end!)}`;
+}
+
+/** Payments others recorded as paid to me, waiting for me to confirm (or reject) them. */
+function PendingForMe({
+  data,
+  nameOf,
+  onDone,
+}: {
+  data: GroupData;
+  nameOf: (id: string) => string;
+  onDone: (message?: string) => void;
+}) {
+  const [busy, startTransition] = useTransition();
+  const [confirm, confirmDialog] = useConfirm();
+  const pending = data.expenses.filter((e) => e.pending && e.splits[0]?.memberId === data.myMemberId);
+  if (pending.length === 0) return null;
+
+  return (
+    <Card className="rise mb-4 border-accent/40 p-4">
+      <h2 className="font-semibold">Confirm payments</h2>
+      <p className="mt-0.5 text-sm text-muted">These count towards balances once you confirm you received them.</p>
+      <ul className="mt-3 space-y-3">
+        {pending.map((e) => (
+          <li key={e.id} className="space-y-2">
+            <p className="text-[15px] break-words">
+              <span className="font-medium">{nameOf(e.payerId)}</span> says they paid you{" "}
+              <Money minor={e.amountMinor} currency={e.currency} className="font-semibold" />
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+              <Button
+                variant="secondary"
+                className="min-h-11 px-2 text-sm whitespace-nowrap"
+                disabled={busy}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Payment not received?",
+                    message: `This removes the payment ${nameOf(e.payerId)} recorded. Balances stay as they were.`,
+                    confirmLabel: "Remove payment",
+                    destructive: true,
+                  });
+                  if (ok) startTransition(async () => {
+                    const r = await deleteExpense(data.groupId, e.id);
+                    onDone(r.error ?? "Payment removed");
+                  });
+                }}
+              >
+                Not received
+              </Button>
+              <Button
+                className="min-h-11 px-3 text-sm"
+                disabled={busy}
+                onClick={() =>
+                  startTransition(async () => {
+                    const r = await confirmPayment(data.groupId, e.id);
+                    onDone(r.error ?? "Payment confirmed");
+                  })
+                }
+              >
+                Confirm
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {confirmDialog}
+    </Card>
+  );
 }

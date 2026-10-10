@@ -4,7 +4,7 @@ import { Card, Page, SectionTitle, Skeleton, TopBar, buttonStyles } from "@/comp
 import { requireMember } from "@/lib/authz";
 import { automaticPostPlan, nextPostAllowedAt } from "@/lib/discord";
 import { loadMembers } from "@/lib/queries";
-import { DeleteGroupCard, DiscordCard, GroupForm, InviteCard, MembersList } from "./settings-forms";
+import { DeleteGroupCard, DiscordCard, GroupForm, InviteCard, MembersList, PaymentsCard } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Group settings" };
 
@@ -52,6 +52,9 @@ async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "pa
             placeholder: m.userId === null,
           }))}
         />
+
+        <SectionTitle>Payments</SectionTitle>
+        <PaymentsCard groupId={id} requireConfirmation={group.requirePaymentConfirmation} isOwner={isOwner} />
 
         <SectionTitle>Discord</SectionTitle>
         {/* Only whether a webhook exists is sent to the browser, never the URL itself. */}
