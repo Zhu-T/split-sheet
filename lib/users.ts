@@ -19,30 +19,40 @@ export async function canSignIn({ discordId, email }: Pick<DiscordIdentity, "dis
 }
 
 /**
+ * Set a user's display name everywhere: their account and every group they've joined
+ * (placeholders they haven't claimed are untouched). Also marks the name as confirmed.
+ */
+export async function setUserName(userId: string, name: string) {
+  await db.transaction(async (tx) => {
+    const [user] = await tx.select({ onboardedAt: schema.users.onboardedAt }).from(schema.users).where(eq(schema.users.id, userId));
+    await tx.update(schema.users).set({ name, onboardedAt: user?.onboardedAt ?? new Date() }).where(eq(schema.users.id, userId));
+    await tx.update(schema.members).set({ displayName: name }).where(eq(schema.members.userId, userId));
+  });
+}
+
+/**
  * Find or create the user for a Discord sign-in. Users are keyed by Discord ID; an existing
  * row with the same verified email but no Discord ID yet (e.g. created before Discord login)
  * is linked rather than duplicated. Stores only Discord ID, email and display name.
  */
 export async function upsertDiscordUser({ discordId, email, name }: DiscordIdentity) {
   const e = normalizeEmail(email);
-  const n = name.slice(0, 80);
+  const n = name.slice(0, 60); // only the default; the user confirms or changes it on /welcome
   return db.transaction(async (tx) => {
     const [existing] = await tx
       .select({ id: schema.users.id, email: schema.users.email })
       .from(schema.users)
       .where(eq(schema.users.discordId, discordId));
     if (existing) {
-      // Follow email changes on Discord unless another account already uses that address.
+      // Follow email changes on Discord unless another account already uses that address. The
+      // name is left alone: people choose it themselves on first sign-in and in Settings.
       const [taken] = existing.email === e ? [] : await tx.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, e));
-      await tx
-        .update(schema.users)
-        .set(taken ? { name: n } : { name: n, email: e })
-        .where(eq(schema.users.id, existing.id));
+      if (!taken && existing.email !== e) await tx.update(schema.users).set({ email: e }).where(eq(schema.users.id, existing.id));
       return { id: existing.id };
     }
     const [byEmail] = await tx.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, e));
     if (byEmail) {
-      await tx.update(schema.users).set({ discordId, name: n }).where(eq(schema.users.id, byEmail.id));
+      await tx.update(schema.users).set({ discordId }).where(eq(schema.users.id, byEmail.id));
       return { id: byEmail.id };
     }
     const [created] = await tx.insert(schema.users).values({ discordId, email: e, name: n }).returning({ id: schema.users.id });

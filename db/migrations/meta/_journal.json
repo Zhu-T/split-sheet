@@ -43,6 +43,13 @@
       "when": 1791606257824,
       "tag": "0005_discord_daily_digest",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791607078989,
+      "tag": "0006_onboarding_name",
+      "breakpoints": true
     }
   ]
 }

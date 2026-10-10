@@ -23,7 +23,8 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   discordId: text("discord_id").unique(), // sign-in identity
   email: text("email").notNull().unique(), // always lowercased; verified by Discord
-  name: text("name").notNull(),
+  name: text("name").notNull(), // chosen by the user on first sign-in (defaults to their Discord name)
+  onboardedAt: timestamp("onboarded_at", { withTimezone: true }), // null until they've confirmed their name
   homeCurrency: text("home_currency").notNull().default("USD"),
   venmoUsername: text("venmo_username"), // optional; shown to people in your groups so they can pay you
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

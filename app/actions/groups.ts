@@ -123,9 +123,10 @@ export async function updateMember(
     .from(schema.members)
     .where(and(eq(schema.members.id, memberId), eq(schema.members.groupId, groupId)));
   if (!target) notFound();
-  // A claimed member's email belongs to their Discord account; only placeholders can change it.
-  const values = target.userId ? { displayName: parsed.data.displayName } : parsed.data;
-  await db.update(schema.members).set(values).where(eq(schema.members.id, memberId));
+  // People who've joined choose their own name (on sign-in and in Settings); only
+  // placeholders, i.e. people added by name who haven't joined yet, can be edited here.
+  if (target.userId) return { error: "People who've joined set their own name in Settings" };
+  await db.update(schema.members).set(parsed.data).where(eq(schema.members.id, memberId));
   refresh();
   return {};
 }
@@ -162,7 +163,7 @@ export async function joinGroup(token: string): Promise<ActionResult> {
   if (placeholder) {
     await db
       .update(schema.members)
-      .set({ userId: user.id, joinedAt: new Date() })
+      .set({ userId: user.id, displayName: user.name, joinedAt: new Date() })
       .where(and(eq(schema.members.id, placeholder.id), isNull(schema.members.userId)));
   } else {
     if (groupMembers.length >= LIMITS.membersPerGroup) return { error: "This group is full" };

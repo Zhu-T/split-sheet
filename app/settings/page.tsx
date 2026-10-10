@@ -5,6 +5,7 @@ import { PageMotion } from "@/components/motion";
 import { Button, Card, Field, Page, SectionTitle, Skeleton, TopBar } from "@/components/ui";
 import { requireUser } from "@/lib/authz";
 import { DeleteAccountButton } from "./delete-account-button";
+import { NameForm } from "./name-form";
 import { VenmoForm } from "./venmo-form";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -26,9 +27,14 @@ async function Settings() {
   const user = await requireUser();
   return (
     <>
+      <SectionTitle>Profile</SectionTitle>
       <Card className="p-4">
-        <p className="font-medium">{user.name}</p>
-        <p className="text-sm text-muted">{user.email}</p>
+        <NameForm current={user.name} />
+      </Card>
+
+      <SectionTitle>Account</SectionTitle>
+      <Card className="p-4">
+        <p className="text-sm text-muted">Signed in with Discord as {user.email}</p>
         <form action={signOutAction} className="mt-3">
           <Button variant="secondary">Sign out</Button>
         </form>

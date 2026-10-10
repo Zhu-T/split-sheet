@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findClaimablePlaceholder, hasAccess, membersBelongToGroup, safeRedirectPath } from "./rules";
+import { cleanDisplayName, findClaimablePlaceholder, hasAccess, membersBelongToGroup, safeRedirectPath } from "./rules";
 
 describe("hasAccess", () => {
   it("allows only active memberships", () => {
@@ -50,5 +50,17 @@ describe("safeRedirectPath", () => {
     expect(safeRedirectPath("//evil.com")).toBe("/");
     expect(safeRedirectPath("/\\evil.com")).toBe("/");
     expect(safeRedirectPath(undefined)).toBe("/");
+  });
+});
+
+describe("cleanDisplayName", () => {
+  it("trims and collapses whitespace", () => {
+    expect(cleanDisplayName("  Tony   Zhu  ")).toBe("Tony Zhu");
+  });
+  it("rejects empty or overly long names", () => {
+    expect(cleanDisplayName("   ")).toBeNull();
+    expect(cleanDisplayName(null)).toBeNull();
+    expect(cleanDisplayName("a".repeat(61))).toBeNull();
+    expect(cleanDisplayName("a".repeat(60))).toBe("a".repeat(60));
   });
 });

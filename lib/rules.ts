@@ -54,3 +54,9 @@ export function safeRedirectPath(path: string | null | undefined, fallback = "/"
   if (!path || !path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return fallback;
   return path;
 }
+
+/** Validated display name: trimmed, 1–60 characters. */
+export function cleanDisplayName(input: unknown): string | null {
+  const name = String(input ?? "").replace(/\s+/g, " ").trim();
+  return name.length >= 1 && name.length <= 60 ? name : null;
+}

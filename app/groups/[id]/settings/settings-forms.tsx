@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState, useTransition, type CSSProperties } from "react";
 import {
   addMember,
@@ -101,7 +102,7 @@ export function MembersList({
               style={{ "--i": i } as CSSProperties}
             >
               <Initials name={m.name} />
-              <button type="button" onClick={() => openSheet(m)} className="min-w-0 flex-1 text-left">
+              <div className="min-w-0 flex-1">
                 <span className="block truncate font-medium">
                   {m.name}
                   {m.id === myMemberId && <span className="text-muted"> (you)</span>}
@@ -110,7 +111,22 @@ export function MembersList({
                   {m.role === "owner" ? "Owner · " : ""}
                   {!m.active ? "Removed" : m.placeholder ? (m.email ? `Not joined yet · ${m.email}` : "Not joined yet") : "Joined"}
                 </span>
-              </button>
+              </div>
+              {/* People who've joined choose their own name; only added-by-name spots are editable here. */}
+              {m.placeholder && (
+                <button
+                  type="button"
+                  onClick={() => openSheet(m)}
+                  aria-label={`Edit ${m.name}`}
+                  title="Edit name or email"
+                  className="grid size-11 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface-2 active:scale-90"
+                >
+                  <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                </button>
+              )}
               {isOwner && m.id !== myMemberId && (
                 <Button
                   variant={m.active ? "danger" : "secondary"}
@@ -138,6 +154,13 @@ export function MembersList({
           <Button variant="ghost" className="w-full" onClick={() => openSheet(null)}>
             Add someone by name
           </Button>
+          <p className="mt-1 text-center text-xs text-muted">
+            People choose their own name when they join. Change yours in{" "}
+            <Link href="/settings" className="underline">
+              Settings
+            </Link>
+            .
+          </p>
         </div>
       </Card>
       {confirmDialog}
@@ -175,7 +198,7 @@ function MemberSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title={member ? "Edit member" : "Add someone"}
+      title={member ? "Edit person" : "Add someone"}
       footer={
         <Button form="member-form" className="w-full" disabled={pending}>
           {pending ? "Saving…" : "Save"}
