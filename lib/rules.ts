@@ -39,7 +39,7 @@ type PlaceholderCandidate = { id: string; userId: string | null; email: string |
 
 /**
  * Joining via invite claims the placeholder whose email matches the joiner's verified
- * Google email (sign-in already rejects unverified emails).
+ * Discord email (sign-in already rejects unverified emails).
  */
 export function findClaimablePlaceholder<T extends PlaceholderCandidate>(
   groupMembers: T[],

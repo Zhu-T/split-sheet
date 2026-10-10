@@ -10,8 +10,8 @@ import { CURRENCY_CODES } from "@/lib/currencies";
 import { safeRedirectPath } from "@/lib/rules";
 import { parseVenmoUsername } from "@/lib/venmo";
 
-export async function signInWithGoogle(form: FormData) {
-  await signIn("google", { redirectTo: safeRedirectPath(form.get("next")?.toString()) });
+export async function signInWithDiscord(form: FormData) {
+  await signIn("discord", { redirectTo: safeRedirectPath(form.get("next")?.toString()) });
 }
 
 export async function signOutAction() {

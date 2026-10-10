@@ -1,22 +1,30 @@
 import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
-import { upsertUser } from "@/lib/users";
+import Discord from "next-auth/providers/discord";
+import { canSignIn, upsertDiscordUser } from "@/lib/users";
+
+/** The parts of Discord's /users/@me response we rely on. */
+type DiscordProfile = { id?: unknown; email?: unknown; verified?: unknown; global_name?: unknown; username?: unknown };
+
+function identityFrom(profile: DiscordProfile | undefined) {
+  if (!profile || typeof profile.id !== "string" || typeof profile.email !== "string") return null;
+  const name = [profile.global_name, profile.username].find((v): v is string => typeof v === "string" && v.length > 0);
+  return { discordId: profile.id, email: profile.email, name: name ?? profile.email, verified: profile.verified === true };
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // Google's OIDC defaults request only `openid email profile`.
-  providers: [Google],
+  // Discord's defaults request only `identify email`.
+  providers: [Discord],
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
+  pages: { signIn: "/login", error: "/login" },
   callbacks: {
-    // Only verified Google emails may sign in; placeholder claiming relies on this.
-    signIn({ profile }) {
-      return profile?.email_verified === true && typeof profile.email === "string";
+    // Only verified Discord emails may sign in; placeholder claiming relies on this.
+    async signIn({ profile }) {
+      const id = identityFrom(profile as DiscordProfile);
+      return !!id && id.verified && (await canSignIn(id));
     },
     async jwt({ token, profile }) {
-      if (profile?.email) {
-        const user = await upsertUser(profile.email, profile.name ?? profile.email);
-        token.uid = user.id;
-      }
+      const id = identityFrom(profile as DiscordProfile);
+      if (id) token.uid = (await upsertDiscordUser(id)).id;
       delete token.picture; // keep nothing we don't need
       return token;
     },

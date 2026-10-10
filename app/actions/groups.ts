@@ -121,7 +121,7 @@ export async function updateMember(
     .from(schema.members)
     .where(and(eq(schema.members.id, memberId), eq(schema.members.groupId, groupId)));
   if (!target) notFound();
-  // A claimed member's email belongs to their Google account; only placeholders can change it.
+  // A claimed member's email belongs to their Discord account; only placeholders can change it.
   const values = target.userId ? { displayName: parsed.data.displayName } : parsed.data;
   await db.update(schema.members).set(values).where(eq(schema.members.id, memberId));
   refresh();

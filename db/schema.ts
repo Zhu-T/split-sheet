@@ -21,7 +21,8 @@ const money = (name: string) => bigint(name, { mode: "number" });
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(), // always lowercased
+  discordId: text("discord_id").unique(), // sign-in identity
+  email: text("email").notNull().unique(), // always lowercased; verified by Discord
   name: text("name").notNull(),
   homeCurrency: text("home_currency").notNull().default("USD"),
   venmoUsername: text("venmo_username"), // optional; shown to people in your groups so they can pay you

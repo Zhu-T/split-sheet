@@ -52,8 +52,9 @@ async function Settings() {
       <SectionTitle>Privacy</SectionTitle>
       <Card className="p-4">
         <p className="text-sm text-muted">
-          We store only your name, your email and, if you add it, your Venmo username. Deleting your account removes all
-          three; your past expenses stay in your groups under your name so everyone&apos;s balances remain correct.
+          We store only your Discord user ID, display name and email, plus your Venmo username if you add it. Deleting
+          your account removes them; your past expenses stay in your groups under your name so everyone&apos;s balances
+          remain correct.
         </p>
         <DeleteAccountButton />
       </Card>

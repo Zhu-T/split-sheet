@@ -1,6 +1,6 @@
 # Split
 
-A small Splitwise-style app for splitting shared expenses in groups. It runs on Vercel's free plan with a free Neon Postgres database. Google sign-in only identifies people: the app asks for name and email and nothing else.
+A small Splitwise-style app for splitting shared expenses in groups. It runs on Vercel's free plan with a free Neon Postgres database. Sign-in is with Discord, used only to identify people: the app asks for Discord ID, display name and email, and nothing else.
 
 ## Features
 
@@ -16,19 +16,21 @@ A small Splitwise-style app for splitting shared expenses in groups. It runs on 
 ## Stack
 
 - Next.js 16 (App Router, Cache Components, Server Actions) and Tailwind 4
-- Auth.js v5 with Google, using JWT sessions (no session table)
+- Auth.js v5 with Discord, using JWT sessions (no session table)
 - Drizzle ORM with Neon serverless Postgres
 - Vitest for the money, split and authorization rules
 
 ## Setup
 
-### 1. Google sign-in
+### 1. Discord sign-in
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), open **APIs & Services**, then **OAuth consent screen**. Choose **External** and add only the `openid`, `email` and `profile` scopes. Publish the app. These scopes aren't sensitive, so Google doesn't need to review it.
-2. Go to **Credentials** and create an **OAuth client ID** of type **Web application**.
-3. Under **Authorized redirect URIs**, add:
-   - `http://localhost:3000/api/auth/callback/google`
-   - `https://<your-domain>/api/auth/callback/google`
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application named e.g. "Split".
+2. Under **OAuth2**, copy the **Client ID** and reset/copy the **Client Secret**. These become `AUTH_DISCORD_ID` and `AUTH_DISCORD_SECRET`.
+3. Under **OAuth2 → Redirects**, add:
+   - `http://localhost:3000/api/auth/callback/discord`
+   - `https://<your-domain>/api/auth/callback/discord`
+
+The app requests only the `identify` and `email` scopes, which don't need Discord's review. Sign-in requires a Discord account with a verified email.
 
 ### 2. Vercel and Neon
 
@@ -36,7 +38,7 @@ A small Splitwise-style app for splitting shared expenses in groups. It runs on 
 2. Under **Storage** (Marketplace), add **Neon**. This creates the database and sets `DATABASE_URL`.
 3. Add these environment variables:
    - `AUTH_SECRET`: generate one with `npx auth secret`.
-   - `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`: from step 1.
+   - `AUTH_DISCORD_ID` and `AUTH_DISCORD_SECRET`: from step 1.
 4. Give **Preview** deployments their own Neon branch, so testing never touches real data. The Neon integration can create a branch per preview.
 
 ### 3. Database
@@ -66,13 +68,13 @@ npm run build
 One-time setup:
 
 1. Import the repository in Vercel and add **Neon** from Storage. Neon sets `DATABASE_URL` and `DATABASE_URL_UNPOOLED`; migrations use the unpooled one.
-2. Add `AUTH_SECRET`, `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` as Vercel environment variables.
+2. Add `AUTH_SECRET`, `AUTH_DISCORD_ID` and `AUTH_DISCORD_SECRET` as Vercel environment variables.
 3. Optional: to keep failing code out of production, turn on Vercel's **Deployment Checks** for the `Lint, test, build` check (Project → Settings).
 
 ## Security notes
 
 - Every Server Action and data loader goes through `lib/authz.ts`. Each one checks that the caller is an active member of the group, and that every member ID it receives belongs to that same group. Anything else returns a 404.
 - Shares are always recalculated on the server. Inputs are validated with Zod and capped (see `LIMITS` in `lib/rules.ts`).
-- A placeholder member can only be claimed by an email Google has verified, through the invite link.
+- A placeholder member can only be claimed by an email Discord has verified, through the invite link. A Discord account can't sign in if its email already belongs to a different Discord account.
 - CSV exports escape formulas. Security headers, including a Content Security Policy and `frame-ancestors 'none'`, are set in `next.config.ts`.
-- Sign-in is open to any Google account. The caps in `lib/rules.ts` keep the free database from being filled.
+- Sign-in is open to any Discord account with a verified email. The caps in `lib/rules.ts` keep the free database from being filled.
