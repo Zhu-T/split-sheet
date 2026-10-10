@@ -12,8 +12,13 @@ function identityFrom(profile: DiscordProfile | undefined) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // Discord's defaults request only `identify email`.
-  providers: [Discord],
+  providers: [
+    // Defaults request only `identify email`. Discord now returns an `iss` parameter on the
+    // OAuth callback (RFC 9207); without a declared issuer Auth.js compares it against a
+    // placeholder and rejects every sign-in ("unexpected iss"). Value from
+    // https://discord.com/.well-known/oauth-authorization-server.
+    Discord({ issuer: "https://discord.com" }),
+  ],
   session: { strategy: "jwt" },
   pages: { signIn: "/login", error: "/login" },
   callbacks: {
