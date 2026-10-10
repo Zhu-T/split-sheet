@@ -3,6 +3,7 @@
 import { useActionState, useState, useTransition, type CSSProperties } from "react";
 import {
   addMember,
+  deleteGroup,
   postDiscordSummaryNow,
   removeDiscordWebhook,
   rotateInvite,
@@ -13,6 +14,7 @@ import {
   updateMember,
   type WebhookFormState,
 } from "@/app/actions/groups";
+import { useConfirm } from "@/components/confirm";
 import { CurrencySelect } from "@/components/currency-select";
 import { Sheet } from "@/components/sheet";
 import { Button, Card, ErrorText, Field, Initials, cx, inputClass } from "@/components/ui";
@@ -20,6 +22,7 @@ import { Button, Card, ErrorText, Field, Initials, cx, inputClass } from "@/comp
 export function InviteCard({ groupId, groupName, token, isOwner }: { groupId: string; groupName: string; token: string; isOwner: boolean }) {
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [confirm, confirmDialog] = useConfirm();
   const link = () => `${window.location.origin}/join/${token}`;
 
   async function share() {
@@ -50,14 +53,20 @@ export function InviteCard({ groupId, groupName, token, isOwner }: { groupId: st
           <Button
             variant="secondary"
             disabled={pending}
-            onClick={() => {
-              if (confirm("Make a new link? The current link will stop working.")) startTransition(() => rotateInvite(groupId));
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Make a new invite link?",
+                message: "The current link will stop working. People already in the group aren't affected.",
+                confirmLabel: "Make new link",
+              });
+              if (ok) startTransition(() => rotateInvite(groupId));
             }}
           >
             {pending ? "…" : "New link"}
           </Button>
         )}
       </div>
+      {confirmDialog}
     </Card>
   );
 }
@@ -78,6 +87,7 @@ export function MembersList({
   // The sheet stays mounted while closing so it can animate out; `key` resets the form per open.
   const [sheet, setSheet] = useState<{ open: boolean; member: MemberItem | null; key: number }>({ open: false, member: null, key: 0 });
   const openSheet = (member: MemberItem | null) => setSheet((s) => ({ open: true, member, key: s.key + 1 }));
+  const [confirm, confirmDialog] = useConfirm();
   const [pending, startTransition] = useTransition();
 
   return (
@@ -106,10 +116,16 @@ export function MembersList({
                   variant={m.active ? "danger" : "secondary"}
                   className="min-h-10 px-3 text-sm"
                   disabled={pending}
-                  onClick={() => {
-                    if (!m.active || confirm(`Remove ${m.name}? Their past expenses and balance stay.`)) {
-                      startTransition(() => setMemberActive(groupId, m.id, !m.active));
-                    }
+                  onClick={async () => {
+                    const ok =
+                      !m.active ||
+                      (await confirm({
+                        title: `Remove ${m.name}?`,
+                        message: "They'll lose access to the group. Their past expenses and balance stay, and you can restore them later.",
+                        confirmLabel: "Remove",
+                        destructive: true,
+                      }));
+                    if (ok) startTransition(() => setMemberActive(groupId, m.id, !m.active));
                   }}
                 >
                   {m.active ? "Remove" : "Restore"}
@@ -124,6 +140,7 @@ export function MembersList({
           </Button>
         </div>
       </Card>
+      {confirmDialog}
       <MemberSheet
         key={sheet.key}
         open={sheet.open}
@@ -224,6 +241,7 @@ export function DiscordCard({
   const [state, formAction, pending] = useActionState(setDiscordWebhook.bind(null, groupId), {} as WebhookFormState);
   const [busy, startTransition] = useTransition();
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const nextAt = nextPostAt ? new Date(nextPostAt) : null;
   const postedRecently = !!nextAt;
@@ -293,8 +311,14 @@ export function DiscordCard({
           <Button
             variant="danger"
             disabled={busy}
-            onClick={() => {
-              if (confirm("Stop posting to this Discord channel?")) startTransition(() => removeDiscordWebhook(groupId));
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Disconnect Discord?",
+                message: "Daily summaries will stop. You can connect a channel again any time.",
+                confirmLabel: "Disconnect",
+                destructive: true,
+              });
+              if (ok) startTransition(() => removeDiscordWebhook(groupId));
             }}
           >
             Disconnect
@@ -311,6 +335,7 @@ export function DiscordCard({
             {note.text}
           </p>
         )}
+        {confirmDialog}
       </Card>
     );
   }
@@ -337,6 +362,42 @@ export function DiscordCard({
         <ErrorText>{state.error}</ErrorText>
         <Button disabled={pending}>{pending ? "Connecting…" : "Connect channel"}</Button>
       </form>
+    </Card>
+  );
+}
+
+/** Owner-only: permanently delete the group, confirmed by typing its name. */
+export function DeleteGroupCard({ groupId, groupName }: { groupId: string; groupName: string }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string>();
+  const [confirm, confirmDialog] = useConfirm();
+
+  async function remove() {
+    const ok = await confirm({
+      title: `Delete ${groupName}?`,
+      message: "This permanently deletes the group, every expense and payment, and its member list for everyone. It can't be undone. Export a CSV first if you want a copy.",
+      confirmLabel: "Delete group",
+      destructive: true,
+      requireText: groupName,
+    });
+    if (!ok) return;
+    setError(undefined);
+    startTransition(async () => {
+      // On success the server redirects to the dashboard; only an error comes back.
+      const r = await deleteGroup(groupId, groupName);
+      if (r?.error) setError(r.error);
+    });
+  }
+
+  return (
+    <Card className="border-danger/40 p-4">
+      <p className="font-medium">Delete this group</p>
+      <p className="mt-1 text-sm text-muted">Removes the group and all of its expenses for every member.</p>
+      <Button variant="destructive" className="mt-3" disabled={pending} onClick={remove}>
+        {pending ? "Deleting…" : "Delete group"}
+      </Button>
+      <ErrorText>{error}</ErrorText>
+      {confirmDialog}
     </Card>
   );
 }

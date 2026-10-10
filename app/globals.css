@@ -144,6 +144,43 @@ dialog.sheet[open]::backdrop {
   }
 }
 
+/* ---------- Confirm dialogs: centred, fade + scale in on every screen size ---------- */
+
+dialog.alert {
+  opacity: 0;
+  scale: 0.96;
+  transition:
+    opacity var(--duration-enter) ease-out,
+    scale var(--duration-enter) var(--ease-out),
+    overlay var(--duration-enter) allow-discrete,
+    display var(--duration-enter) allow-discrete;
+}
+dialog.alert[open] {
+  opacity: 1;
+  scale: 1;
+}
+@starting-style {
+  dialog.alert[open] {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+dialog.alert::backdrop {
+  background: rgb(0 0 0 / 0);
+  transition:
+    background-color var(--duration-enter) ease-out,
+    overlay var(--duration-enter) allow-discrete,
+    display var(--duration-enter) allow-discrete;
+}
+dialog.alert[open]::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+@starting-style {
+  dialog.alert[open]::backdrop {
+    background: rgb(0 0 0 / 0);
+  }
+}
+
 /* ---------- Content entrance: lists rise in with a short stagger ---------- */
 
 @keyframes rise {

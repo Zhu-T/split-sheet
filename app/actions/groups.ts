@@ -1,7 +1,7 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
@@ -220,4 +220,23 @@ export async function postDiscordSummaryNow(groupId: string): Promise<ActionResu
     default:
       return { error: r.status === 404 ? "The webhook was deleted in Discord. Disconnect and add a new one." : "Discord didn't accept the message. Try again later." };
   }
+}
+
+/**
+ * Permanently delete a group and everything in it (owner only). The owner must type the
+ * group's name to confirm; the check is repeated here, not just in the browser.
+ */
+export async function deleteGroup(groupId: string, confirmName: string): Promise<ActionResult> {
+  const { group } = await requireOwner(groupId);
+  if (String(confirmName ?? "").trim() !== group.name.trim()) {
+    return { error: "Type the group's name exactly to confirm" };
+  }
+  await db.transaction(async (tx) => {
+    const expenseIds = tx.select({ id: schema.expenses.id }).from(schema.expenses).where(eq(schema.expenses.groupId, groupId));
+    await tx.delete(schema.expenseSplits).where(inArray(schema.expenseSplits.expenseId, expenseIds));
+    await tx.delete(schema.expenses).where(eq(schema.expenses.groupId, groupId));
+    await tx.delete(schema.members).where(eq(schema.members.groupId, groupId));
+    await tx.delete(schema.groups).where(eq(schema.groups.id, groupId));
+  });
+  redirect("/");
 }

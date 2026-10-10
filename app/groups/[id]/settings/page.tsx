@@ -4,7 +4,7 @@ import { Card, Page, SectionTitle, Skeleton, TopBar, buttonStyles } from "@/comp
 import { requireMember } from "@/lib/authz";
 import { nextPostAllowedAt } from "@/lib/discord";
 import { loadMembers } from "@/lib/queries";
-import { DiscordCard, GroupForm, InviteCard, MembersList } from "./settings-forms";
+import { DeleteGroupCard, DiscordCard, GroupForm, InviteCard, MembersList } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Group settings" };
 
@@ -75,6 +75,14 @@ async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "pa
             Export CSV
           </a>
         </Card>
+
+        {/* Kept last and apart from everything else: it can't be undone. */}
+        {isOwner && (
+          <>
+            <SectionTitle>Danger zone</SectionTitle>
+            <DeleteGroupCard groupId={id} groupName={group.name} />
+          </>
+        )}
       </Page>
     </>
   );
