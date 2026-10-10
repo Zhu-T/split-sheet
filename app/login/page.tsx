@@ -39,7 +39,7 @@ async function SignInForm({ searchParams }: Pick<PageProps<"/login">, "searchPar
         <p role="alert" className="mb-4 rounded-xl bg-surface-2 px-3 py-2 text-sm text-danger">
           {params.error === "AccessDenied"
             ? "Sign-in needs a Discord account with a verified email address. Verify your email in Discord (User Settings → My Account), then try again."
-            : "Sign-in didn't work. Please try again."}
+            : `Sign-in didn't work. Please try again. (Error: ${String(params.error).slice(0, 40)})`}
         </p>
       )}
       <SignInButton next={next} />
