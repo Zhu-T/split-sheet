@@ -51,46 +51,64 @@ export function payload(lines: string[], ping: Person[]): WebhookPayload {
   };
 }
 
-export type ExpenseEvent = {
-  action: "added" | "edited" | "deleted";
-  kind: "expense" | "settlement";
-  actor: Person;
-  description: string;
-  amount: string; // formatted, e.g. "$80.00"
-  payer: Person;
-  /** Who owes the payer what for this entry (payer excluded). For a settlement: the receiver. */
-  owes: { person: Person; amount: string }[];
+/** At most one post per group per day. 22h (not 24h) so the daily cron, which Vercel may run
+ * anywhere within its scheduled hour, never skips a day. */
+export const DIGEST_MIN_GAP_MS = 22 * 60 * 60 * 1000;
+
+/** When the next post is allowed, or null if one is allowed now. */
+export function nextPostAllowedAt(lastPostedAt: Date | null, now: Date): Date | null {
+  if (!lastPostedAt) return null;
+  const next = new Date(lastPostedAt.getTime() + DIGEST_MIN_GAP_MS);
+  return next > now ? next : null;
+}
+
+export type Digest = {
   groupName: string;
   link: string | null;
+  added: { description: string; amount: string; payer: Person }[];
+  payments: { from: Person; to: Person; amount: string }[];
+  edited: number;
+  deleted: number;
+  /** Suggested payments that settle the group now. */
+  owes: { from: Person; to: Person; amount: string }[];
 };
 
-/** Human-readable message for an expense or payment change. */
-export function expenseMessage(e: ExpenseEvent): WebhookPayload {
-  const group = `*${escapeMarkdown(e.groupName)}*`;
-  const by = mention(e.actor);
-  const lines: string[] = [];
+const MAX_LISTED = 10;
 
-  if (e.kind === "settlement") {
-    const to = e.owes[0]?.person;
-    const what = `${mention(e.payer)} paid ${to ? mention(to) : "someone"} **${e.amount}**`;
-    lines.push(
-      e.action === "added" ? `💸 ${what} in ${group}` : e.action === "edited" ? `✏️ ${by} edited a payment in ${group}: ${what}` : `🗑️ ${by} deleted a payment in ${group} (${what})`,
-    );
-  } else {
-    const title = `**${escapeMarkdown(e.description)}**`;
-    if (e.action === "deleted") {
-      lines.push(`🗑️ ${by} deleted ${title} (${e.amount}) in ${group}`);
-    } else {
-      lines.push(
-        e.action === "added"
-          ? `🧾 ${by} added ${title} in ${group}: **${e.amount}**, paid by ${mention(e.payer)}`
-          : `✏️ ${by} edited ${title} in ${group}: now **${e.amount}**, paid by ${mention(e.payer)}`,
-      );
-      for (const o of e.owes) lines.push(`• ${mention(o.person)} owes ${o.amount}`);
-    }
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** One daily summary: what changed since the last post, then who owes whom (with pings). */
+export function digestMessage(d: Digest): WebhookPayload {
+  const lines = [`📊 **Daily summary** for *${escapeMarkdown(d.groupName)}*`];
+
+  if (d.added.length + d.payments.length + d.edited + d.deleted === 0) {
+    lines.push("No changes since the last summary.");
   }
-  if (e.link) lines.push(`<${e.link}>`);
-  // Ping the people whose balance changed, but not the person who made the change.
-  const ping = e.action === "deleted" ? [] : [e.payer, ...e.owes.map((o) => o.person)].filter((p) => p.discordId !== e.actor.discordId);
-  return payload(lines, ping);
+  if (d.added.length) {
+    lines.push("", `🧾 ${plural(d.added.length, "new expense")}:`);
+    for (const a of d.added.slice(0, MAX_LISTED)) {
+      lines.push(`• ${escapeMarkdown(a.description)}: ${a.amount}, paid by ${mention(a.payer)}`);
+    }
+    if (d.added.length > MAX_LISTED) lines.push(`• …and ${d.added.length - MAX_LISTED} more`);
+  }
+  if (d.payments.length) {
+    lines.push("", `💸 ${plural(d.payments.length, "payment")}:`);
+    for (const p of d.payments.slice(0, MAX_LISTED)) lines.push(`• ${mention(p.from)} paid ${mention(p.to)} ${p.amount}`);
+    if (d.payments.length > MAX_LISTED) lines.push(`• …and ${d.payments.length - MAX_LISTED} more`);
+  }
+  if (d.edited || d.deleted) {
+    lines.push("", [d.edited && `✏️ ${plural(d.edited, "expense")} edited`, d.deleted && `🗑️ ${d.deleted} deleted`].filter(Boolean).join(" · "));
+  }
+
+  lines.push("");
+  if (d.owes.length === 0) {
+    lines.push("✅ Everyone is settled up.");
+  } else {
+    lines.push("**Who owes whom**");
+    for (const o of d.owes) lines.push(`• ${mention(o.from)} owes ${mention(o.to)} **${o.amount}**`);
+  }
+  if (d.link) lines.push("", `<${d.link}>`);
+
+  // Ping only people who currently owe money; they're the ones who need to act.
+  return payload(lines, d.owes.map((o) => o.from));
 }

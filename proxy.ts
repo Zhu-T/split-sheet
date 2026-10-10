@@ -12,6 +12,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except login, auth endpoints, static assets and PWA files.
-  matcher: ["/((?!login|api/auth|_next/|favicon.ico|manifest.webmanifest|icon|apple-icon).*)"],
+  // Everything except login, auth endpoints, the cron endpoint (it checks CRON_SECRET itself),
+  // static assets and PWA files.
+  matcher: ["/((?!login|api/auth|api/cron|_next/|favicon.ico|manifest.webmanifest|icon|apple-icon).*)"],
 };

@@ -36,6 +36,9 @@ export const groups = pgTable("groups", {
   inviteToken: text("invite_token").notNull().unique(),
   // Secret (anyone with it can post to the channel): only the owner can set it; never sent to browsers.
   discordWebhookUrl: text("discord_webhook_url"),
+  // Daily summary: when it was last posted (enforces one per day) and whether the cron posts it.
+  discordLastPostedAt: timestamp("discord_last_posted_at", { withTimezone: true }),
+  discordAutoDigest: boolean("discord_auto_digest").notNull().default(true),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

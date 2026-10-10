@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeMarkdown, expenseMessage, mention, parseWebhookUrl, type ExpenseEvent } from "./discord";
+import { digestMessage, escapeMarkdown, mention, nextPostAllowedAt, parseWebhookUrl, type Digest } from "./discord";
 
 const ID = "123456789012345678";
 const TOKEN = "a".repeat(68);
@@ -38,46 +38,67 @@ describe("formatting", () => {
   });
 });
 
-describe("expenseMessage", () => {
+describe("daily limit", () => {
+  const now = new Date("2026-10-10T01:30:00Z");
+  it("allows a post when there's never been one or the last was 22h+ ago", () => {
+    expect(nextPostAllowedAt(null, now)).toBeNull();
+    expect(nextPostAllowedAt(new Date("2026-10-09T01:59:00Z"), now)).toBeNull(); // yesterday's cron, late in its hour
+  });
+  it("blocks a second post within the same day and says when the next is allowed", () => {
+    expect(nextPostAllowedAt(new Date("2026-10-09T18:00:00Z"), now)).toEqual(new Date("2026-10-10T16:00:00Z"));
+  });
+});
+
+describe("digestMessage", () => {
   const tony = { name: "Tony", discordId: ID };
   const alex = { name: "Alex", discordId: "223456789012345678" };
   const sam = { name: "Sam", discordId: null };
-  const base: ExpenseEvent = {
-    action: "added",
-    kind: "expense",
-    actor: tony,
-    description: "Dinner @everyone",
-    amount: "$90.00",
-    payer: tony,
-    owes: [
-      { person: alex, amount: "$30.00" },
-      { person: sam, amount: "$30.00" },
-    ],
+  const base: Digest = {
     groupName: "Japan trip",
     link: "https://split.example/groups/1",
+    added: [{ description: "Dinner @everyone", amount: "$90.00", payer: tony }],
+    payments: [{ from: alex, to: tony, amount: "$20.00" }],
+    edited: 1,
+    deleted: 0,
+    owes: [
+      { from: alex, to: tony, amount: "$10.00" },
+      { from: sam, to: tony, amount: "$30.00" },
+    ],
   };
 
-  it("describes a new expense, who owes what, and pings only affected Discord users", () => {
-    const p = expenseMessage(base);
+  it("summarises changes and who owes whom, pinging only people who owe", () => {
+    const p = digestMessage(base);
     expect(p.content).toBe(
       [
-        `🧾 <@${ID}> added **Dinner @everyone** in *Japan trip*: **$90.00**, paid by <@${ID}>`,
-        "• <@223456789012345678> owes $30.00",
-        "• **Sam** owes $30.00",
+        "📊 **Daily summary** for *Japan trip*",
+        "",
+        "🧾 1 new expense:",
+        `• Dinner @everyone: $90.00, paid by <@${ID}>`,
+        "",
+        "💸 1 payment:",
+        `• <@223456789012345678> paid <@${ID}> $20.00`,
+        "",
+        "✏️ 1 expense edited",
+        "",
+        "**Who owes whom**",
+        `• <@223456789012345678> owes <@${ID}> **$10.00**`,
+        `• **Sam** owes <@${ID}> **$30.00**`,
+        "",
         "<https://split.example/groups/1>",
       ].join("\n"),
     );
-    // @everyone in the description can't ping: no parse types allowed; the actor isn't pinged.
+    // @everyone in a description can't ping; only Alex (who owes and has Discord) is pinged.
     expect(p.allowed_mentions).toEqual({ parse: [], users: ["223456789012345678"] });
   });
 
-  it("describes payments and deletions without pinging on delete", () => {
-    const paid = expenseMessage({ ...base, kind: "settlement", actor: alex, payer: alex, owes: [{ person: tony, amount: "$20.00" }], amount: "$20.00", link: null });
-    expect(paid.content).toBe(`💸 <@223456789012345678> paid <@${ID}> **$20.00** in *Japan trip*`);
-    expect(paid.allowed_mentions.users).toEqual([ID]);
+  it("handles quiet days and settled groups", () => {
+    const p = digestMessage({ ...base, added: [], payments: [], edited: 0, owes: [], link: null });
+    expect(p.content).toBe(["📊 **Daily summary** for *Japan trip*", "No changes since the last summary.", "", "✅ Everyone is settled up."].join("\n"));
+    expect(p.allowed_mentions.users).toEqual([]);
+  });
 
-    const deleted = expenseMessage({ ...base, action: "deleted", link: null });
-    expect(deleted.content).toBe(`🗑️ <@${ID}> deleted **Dinner @everyone** ($90.00) in *Japan trip*`);
-    expect(deleted.allowed_mentions.users).toEqual([]);
+  it("caps long lists", () => {
+    const many = Array.from({ length: 13 }, (_, i) => ({ description: `Item ${i}`, amount: "$1.00", payer: tony }));
+    expect(digestMessage({ ...base, added: many }).content).toContain("• …and 3 more");
   });
 });

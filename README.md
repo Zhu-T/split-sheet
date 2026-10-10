@@ -9,7 +9,7 @@ A small Splitwise-style app for splitting shared expenses in groups. It runs on 
 - Split equally, by exact amounts or by percentage, in 30 currencies. Exchange rates come from the ECB via Frankfurter and can be edited per expense.
 - Balances, suggested settle-ups and recorded payments.
 - Pay with Venmo from the settle-up screen when the person you owe has added their Venmo username. Venmo has no public API, so this opens a pre-filled payment in the Venmo app (or website), and you record the payment yourself once it's sent. USD only.
-- Discord notifications: a group owner can connect a channel webhook, and new, edited and deleted expenses and payments are posted there, @mentioning the people whose balance changed.
+- Discord daily summary: a group owner can connect a channel webhook. At most one message a day is posted, either automatically each evening (Vercel Cron, only if something changed) or with "Post today's summary now". It lists new expenses and payments, then who owes whom, @mentioning people who owe.
 - A dashboard across all your groups, converted to your home currency.
 - CSV export and "Delete my account".
 - Designed for phones first, and can be installed to the home screen.
@@ -70,7 +70,8 @@ One-time setup:
 
 1. Import the repository in Vercel and add **Neon** from Storage. Neon sets `DATABASE_URL` and `DATABASE_URL_UNPOOLED`; migrations use the unpooled one.
 2. Add `AUTH_SECRET`, `AUTH_DISCORD_ID` and `AUTH_DISCORD_SECRET` as Vercel environment variables.
-3. Optional: to keep failing code out of production, turn on Vercel's **Deployment Checks** for the `Lint, test, build` check (Project → Settings).
+3. For the daily Discord summary, add `CRON_SECRET` (e.g. `openssl rand -hex 32`). `vercel.json` schedules `/api/cron/discord-digest` at 01:00 UTC (evening in the US); Hobby crons run once a day, sometime within that hour.
+4. Optional: to keep failing code out of production, turn on Vercel's **Deployment Checks** for the `Lint, test, build` check (Project → Settings).
 
 ## Security notes
 

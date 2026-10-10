@@ -2,14 +2,12 @@
 
 import { and, count, eq, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
-import { after } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireMember } from "@/lib/authz";
 import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRate } from "@/lib/fx";
 import { decimals, parseAmount } from "@/lib/money";
-import { notifyExpenseChange } from "@/lib/notify";
 import { asCurrency } from "@/lib/queries";
 import { LIMITS, membersBelongToGroup } from "@/lib/rules";
 import { computeShares, SPLIT_TYPES, type SplitInput, type SplitType } from "@/lib/split";
@@ -145,55 +143,17 @@ export async function saveExpense(groupId: string, raw: ExpenseInput): Promise<A
     refresh();
     return {};
   });
-
-  if (!saved.error) {
-    // Posted after the response is sent, so a slow or broken webhook never delays saving.
-    after(() =>
-      notifyExpenseChange({
-        groupId,
-        action: input.expenseId ? "edited" : "added",
-        kind: input.kind,
-        actorMemberId: me.id,
-        description: input.description,
-        amountMinor,
-        currency: input.currency,
-        payerId: input.payerId,
-        shares: result.shares,
-      }),
-    );
-  }
   return saved;
 }
 
 export async function deleteExpense(groupId: string, expenseId: string): Promise<ActionResult> {
-  const { member: me } = await requireMember(groupId);
+  await requireMember(groupId);
   if (!z.uuid().safeParse(expenseId).success) return { error: "Unknown expense" };
   const now = new Date();
-  const [deleted] = await db
+  await db
     .update(schema.expenses)
     .set({ deletedAt: now, updatedAt: now })
-    .where(and(eq(schema.expenses.id, expenseId), eq(schema.expenses.groupId, groupId), isNull(schema.expenses.deletedAt)))
-    .returning();
+    .where(and(eq(schema.expenses.id, expenseId), eq(schema.expenses.groupId, groupId), isNull(schema.expenses.deletedAt)));
   refresh();
-
-  if (deleted) {
-    after(async () => {
-      const splits = await db
-        .select({ memberId: schema.expenseSplits.memberId, shareMinor: schema.expenseSplits.shareMinor })
-        .from(schema.expenseSplits)
-        .where(eq(schema.expenseSplits.expenseId, deleted.id));
-      await notifyExpenseChange({
-        groupId,
-        action: "deleted",
-        kind: deleted.kind,
-        actorMemberId: me.id,
-        description: deleted.description,
-        amountMinor: deleted.amountMinor,
-        currency: deleted.currency,
-        payerId: deleted.payerMemberId,
-        shares: splits,
-      });
-    });
-  }
   return {};
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageMotion } from "@/components/motion";
 import { Card, Page, SectionTitle, Skeleton, TopBar, buttonStyles } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
+import { nextPostAllowedAt } from "@/lib/discord";
 import { loadMembers } from "@/lib/queries";
 import { DiscordCard, GroupForm, InviteCard, MembersList } from "./settings-forms";
 
@@ -54,7 +55,13 @@ async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "pa
 
         <SectionTitle>Discord</SectionTitle>
         {/* Only whether a webhook exists is sent to the browser, never the URL itself. */}
-        <DiscordCard groupId={id} connected={!!group.discordWebhookUrl} isOwner={isOwner} />
+        <DiscordCard
+          groupId={id}
+          connected={!!group.discordWebhookUrl}
+          isOwner={isOwner}
+          autoDigest={group.discordAutoDigest}
+          nextPostAt={nextPostAllowedAt(group.discordLastPostedAt, new Date())?.toISOString() ?? null}
+        />
 
         <SectionTitle>Group</SectionTitle>
         <Card className="p-4">

@@ -3,9 +3,10 @@
 import { useActionState, useState, useTransition, type CSSProperties } from "react";
 import {
   addMember,
+  postDiscordSummaryNow,
   removeDiscordWebhook,
   rotateInvite,
-  sendTestDiscordMessage,
+  setDiscordAutoDigest,
   setDiscordWebhook,
   setMemberActive,
   updateGroup,
@@ -205,18 +206,34 @@ export function GroupForm({ groupId, name, baseCurrency }: { groupId: string; na
   );
 }
 
-/** Discord channel notifications. The webhook URL is a secret, so it's never shown again once saved. */
-export function DiscordCard({ groupId, connected, isOwner }: { groupId: string; connected: boolean; isOwner: boolean }) {
+/** Discord daily summary. The webhook URL is a secret, so it's never shown again once saved. */
+export function DiscordCard({
+  groupId,
+  connected,
+  isOwner,
+  autoDigest,
+  nextPostAt,
+}: {
+  groupId: string;
+  connected: boolean;
+  isOwner: boolean;
+  autoDigest: boolean;
+  /** When the next summary may be posted; null if one can be posted now. */
+  nextPostAt: string | null;
+}) {
   const [state, formAction, pending] = useActionState(setDiscordWebhook.bind(null, groupId), {} as WebhookFormState);
   const [busy, startTransition] = useTransition();
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const nextAt = nextPostAt ? new Date(nextPostAt) : null;
+  const postedRecently = !!nextAt;
 
   if (!isOwner) {
     return (
       <Card className="p-4">
         <p className="text-sm text-muted">
           {connected
-            ? "Expense updates are posted to a Discord channel. Only the group owner can change this."
+            ? "A daily summary is posted to a Discord channel. Only the group owner can change this."
             : "Not connected to Discord. The group owner can connect a channel."}
         </p>
       </Card>
@@ -231,32 +248,64 @@ export function DiscordCard({ groupId, connected, isOwner }: { groupId: string; 
           Connected to a Discord channel
         </p>
         <p className="mt-1 text-sm text-muted">
-          New, edited and deleted expenses and payments are posted there. People who signed in with Discord get @mentioned
-          when their balance changes.
+          At most one message a day: new expenses and payments, then who owes whom. People who owe money get @mentioned.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
+
+        <label className="mt-4 flex min-h-11 cursor-pointer items-center justify-between gap-3">
+          <span>
+            <span className="block text-[15px] font-medium">Post automatically</span>
+            <span className="block text-sm text-muted">Each evening (US time), only if something changed.</span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoDigest}
+            disabled={busy}
+            onClick={() => startTransition(() => setDiscordAutoDigest(groupId, !autoDigest))}
+            className={cx(
+              "relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200",
+              autoDigest ? "bg-accent" : "bg-line",
+            )}
+          >
+            <span
+              aria-hidden
+              className={cx(
+                "absolute top-1 left-1 size-5 rounded-full bg-surface shadow transition-transform duration-200",
+                autoDigest && "translate-x-5",
+              )}
+            />
+          </button>
+        </label>
+
+        <div className="mt-4 flex flex-wrap gap-2">
           <Button
             variant="secondary"
-            disabled={busy}
+            disabled={busy || postedRecently}
             onClick={() =>
               startTransition(async () => {
-                const r = await sendTestDiscordMessage(groupId);
-                setNote(r.error ? { text: r.error, ok: false } : { text: "Test message sent", ok: true });
+                const r = await postDiscordSummaryNow(groupId);
+                setNote(r.error ? { text: r.error, ok: false } : { text: "Summary posted", ok: true });
               })
             }
           >
-            Send test message
+            Post today&apos;s summary now
           </Button>
           <Button
             variant="danger"
             disabled={busy}
             onClick={() => {
-              if (confirm("Stop posting updates to this Discord channel?")) startTransition(() => removeDiscordWebhook(groupId));
+              if (confirm("Stop posting to this Discord channel?")) startTransition(() => removeDiscordWebhook(groupId));
             }}
           >
             Disconnect
           </Button>
         </div>
+        {postedRecently && nextAt && (
+          <p className="mt-2 text-sm text-muted" suppressHydrationWarning>
+            Today&apos;s summary has been posted. The next one can go out after{" "}
+            {nextAt.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}.
+          </p>
+        )}
         {note && (
           <p role="status" className={cx("toast mt-2 text-sm", note.ok ? "text-owed" : "text-danger")}>
             {note.text}
@@ -270,7 +319,9 @@ export function DiscordCard({ groupId, connected, isOwner }: { groupId: string; 
     <Card className="p-4">
       <form action={formAction} className="space-y-3">
         <p className="text-sm text-muted">
-          Post expense updates to a Discord channel. In Discord: <span className="font-medium text-text">Edit Channel → Integrations → Webhooks → New Webhook → Copy Webhook URL</span>, then paste it here.
+          Post a daily summary to a Discord channel. In Discord:{" "}
+          <span className="font-medium text-text">Edit Channel → Integrations → Webhooks → New Webhook → Copy Webhook URL</span>,
+          then paste it here.
         </p>
         <Field label="Webhook URL">
           <input

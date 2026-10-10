@@ -9,8 +9,8 @@ import { db, schema } from "@/db";
 import { requireMember, requireUser } from "@/lib/authz";
 import { CURRENCY_CODES } from "@/lib/currencies";
 import { findClaimablePlaceholder, LIMITS } from "@/lib/rules";
-import { escapeMarkdown, mention, parseWebhookUrl, payload } from "@/lib/discord";
-import { postWebhook } from "@/lib/notify";
+import { parseWebhookUrl } from "@/lib/discord";
+import { postGroupDigest } from "@/lib/notify";
 import { normalizeEmail } from "@/lib/users";
 
 export type ActionResult = { error?: string };
@@ -177,7 +177,7 @@ export type WebhookFormState = { error?: string; connected?: boolean };
 
 /** Connect a Discord channel webhook (owner only). Checks with Discord that it exists first. */
 export async function setDiscordWebhook(groupId: string, _: WebhookFormState, form: FormData): Promise<WebhookFormState> {
-  const { group } = await requireOwner(groupId);
+  await requireOwner(groupId);
   const url = parseWebhookUrl(String(form.get("webhookUrl") ?? ""));
   if (!url) return { error: "Paste a Discord webhook URL (https://discord.com/api/webhooks/…)" };
 
@@ -188,11 +188,8 @@ export async function setDiscordWebhook(groupId: string, _: WebhookFormState, fo
     return { error: "Couldn't reach Discord. Try again in a moment." };
   }
 
+  // No welcome message: the channel gets at most one post a day, and that's the summary.
   await db.update(schema.groups).set({ discordWebhookUrl: url }).where(eq(schema.groups.id, groupId));
-  await postWebhook(
-    url,
-    payload([`👋 This channel will now get expense updates from *${escapeMarkdown(group.name)}*.`], []),
-  );
   refresh();
   return { connected: true };
 }
@@ -203,17 +200,24 @@ export async function removeDiscordWebhook(groupId: string): Promise<void> {
   refresh();
 }
 
-export async function sendTestDiscordMessage(groupId: string): Promise<ActionResult> {
-  const { group, member } = await requireOwner(groupId);
-  if (!group.discordWebhookUrl) return { error: "No Discord channel is connected" };
-  const [me] = await db
-    .select({ discordId: schema.users.discordId })
-    .from(schema.users)
-    .where(eq(schema.users.id, member.userId!));
-  const sender = { name: member.displayName, discordId: me?.discordId ?? null };
-  const res = await postWebhook(
-    group.discordWebhookUrl,
-    payload([`✅ Test from ${mention(sender)}: *${escapeMarkdown(group.name)}* is connected.`], []),
-  );
-  return res.ok ? {} : { error: res.status === 404 ? "The webhook was deleted in Discord. Disconnect and add a new one." : "Discord didn't accept the message" };
+export async function setDiscordAutoDigest(groupId: string, enabled: boolean): Promise<void> {
+  await requireOwner(groupId);
+  await db.update(schema.groups).set({ discordAutoDigest: enabled }).where(eq(schema.groups.id, groupId));
+  refresh();
+}
+
+/** Post today's summary now instead of waiting for the automatic one (still once a day). */
+export async function postDiscordSummaryNow(groupId: string): Promise<ActionResult & { nextAt?: string }> {
+  await requireOwner(groupId);
+  const r = await postGroupDigest(groupId, { skipIfQuiet: false });
+  refresh();
+  if (r.posted) return {};
+  switch (r.reason) {
+    case "too-soon":
+      return { error: "Today's summary has already been posted.", nextAt: r.nextAt.toISOString() };
+    case "not-connected":
+      return { error: "No Discord channel is connected" };
+    default:
+      return { error: r.status === 404 ? "The webhook was deleted in Discord. Disconnect and add a new one." : "Discord didn't accept the message. Try again later." };
+  }
 }
