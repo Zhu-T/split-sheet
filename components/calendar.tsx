@@ -200,6 +200,7 @@ export function CalendarDialog({
   status,
   children,
   footer,
+  top = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -207,6 +208,8 @@ export function CalendarDialog({
   status?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  /** Sit near the top on phones (for dialogs with a text field, so the keyboard doesn't cover them). */
+  top?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -226,7 +229,10 @@ export function CalendarDialog({
       }}
       onClick={(e) => e.target === ref.current && onClose()}
       // On 320px phones, 8px margins and 12px padding leave exactly 7 × 40px day columns.
-      className="alert m-auto w-[calc(100%-1rem)] max-w-[22rem] rounded-2xl bg-surface p-0 text-text shadow-2xl min-[360px]:w-[calc(100%-2rem)]"
+      className={cx(
+        "alert w-[calc(100%-1rem)] max-w-[22rem] rounded-2xl bg-surface p-0 text-text shadow-2xl min-[360px]:w-[calc(100%-2rem)]",
+        top ? "mx-auto mt-[max(env(safe-area-inset-top),1.5rem)] mb-auto sm:m-auto" : "m-auto",
+      )}
     >
       {open && (
         <div className="p-3 min-[360px]:p-4">

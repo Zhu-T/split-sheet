@@ -1,14 +1,21 @@
-// Currencies supported by the Frankfurter exchange-rate API, with ISO 4217 minor-unit digits.
-export const CURRENCIES = {
-  AUD: 2, BRL: 2, CAD: 2, CHF: 2, CNY: 2, CZK: 2, DKK: 2, EUR: 2, GBP: 2, HKD: 2,
-  HUF: 2, IDR: 2, ILS: 2, INR: 2, ISK: 0, JPY: 0, KRW: 0, MXN: 2, MYR: 2, NOK: 2,
-  NZD: 2, PHP: 2, PLN: 2, RON: 2, SEK: 2, SGD: 2, THB: 2, TRY: 2, USD: 2, ZAR: 2,
-} as const;
+import { CURRENCY_DATA } from "./currency-data";
 
-export type Currency = keyof typeof CURRENCIES;
+// Every current ISO 4217 currency (see scripts/generate-currencies.mjs), with names and decimals.
 
-export const CURRENCY_CODES = Object.keys(CURRENCIES) as Currency[];
+export type Currency = keyof typeof CURRENCY_DATA;
+
+/** Minor-unit digits per currency (e.g. USD 2, JPY 0, KWD 3). */
+export const CURRENCIES = Object.fromEntries(Object.entries(CURRENCY_DATA).map(([code, c]) => [code, c.decimals])) as Record<Currency, number>;
+
+export const CURRENCY_CODES = Object.keys(CURRENCY_DATA) as Currency[];
 
 export function isCurrency(code: string): code is Currency {
-  return Object.hasOwn(CURRENCIES, code);
+  return Object.hasOwn(CURRENCY_DATA, code);
 }
+
+export function currencyName(code: Currency): string {
+  return CURRENCY_DATA[code].name;
+}
+
+/** Shown first in the currency picker (after the person's own currencies). */
+export const POPULAR_CURRENCIES: Currency[] = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "MXN", "CHF", "CNY", "KRW", "INR", "SGD", "THB"];

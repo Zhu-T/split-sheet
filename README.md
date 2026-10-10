@@ -6,7 +6,7 @@ A small Splitwise-style app for splitting shared expenses in groups. It runs on 
 
 - Groups with invite links. Only the owner can make a new link, which stops the old one working.
 - Add people by name before they join. If you include their email, they take over that spot when they sign in through the invite link.
-- Split equally, by exact amounts or by percentage, in 30 currencies. Exchange rates come from the ECB via Frankfurter and can be edited per expense.
+- Split equally, by exact amounts or by percentage, in any of 154 currencies (searchable picker). Daily exchange rates come from the free fawazahmed0 currency API and can be edited per expense.
 - Balances, suggested settle-ups and recorded payments. Optionally (per group), the person being paid is asked to confirm each payment; payments count straight away, and "Not received" undoes one.
 - Edit history on every expense and payment (who changed what, and when), Undo right after a delete, and a "Recently deleted" list (30 days) to restore from.
 - Past trips: trips move to a "Past trips" section once they end. The owner can archive a trip (expenses read-only, payments still allowed); trips also archive automatically 20 days after they end, which is when automatic Discord summaries stop too. Unarchiving turns auto-archive off for that trip.

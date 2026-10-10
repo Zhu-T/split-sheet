@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeBalances, type LedgerEntry } from "./balances";
 import { csvCell } from "./csv";
+import { CURRENCIES, CURRENCY_CODES, currencyName } from "./currencies";
 import { convert, formatMoney, parseAmount, toDecimalString } from "./money";
 import { simplifyDebts } from "./simplify";
 import { allocate, computeShares } from "./split";
@@ -29,6 +30,22 @@ describe("money", () => {
     expect(convert(1000, "USD", "JPY", 150)).toBe(1500); // $10 -> ¥1500
     expect(convert(1500, "JPY", "USD", 1 / 150)).toBe(1000);
     expect(convert(1000, "EUR", "EUR", 2)).toBe(1000);
+  });
+});
+
+describe("currencies", () => {
+  it("covers every current currency with the right decimal places", () => {
+    expect(CURRENCY_CODES.length).toBeGreaterThan(150);
+    expect([CURRENCIES.USD, CURRENCIES.JPY, CURRENCIES.KWD, CURRENCIES.VND]).toEqual([2, 0, 3, 0]);
+    expect(currencyName("VND")).toBe("Vietnamese Dong");
+  });
+  it("keeps the decimals existing amounts were stored with", () => {
+    // These were 2 when the app launched; changing them would rescale stored amounts.
+    expect([CURRENCIES.HUF, CURRENCIES.IDR, CURRENCIES.ISK, CURRENCIES.KRW]).toEqual([2, 2, 0, 0]);
+  });
+  it("formats a 3-decimal currency", () => {
+    expect(parseAmount("1.234", "KWD")).toBe(1234);
+    expect(toDecimalString(1234, "KWD")).toBe("1.234");
   });
 });
 
