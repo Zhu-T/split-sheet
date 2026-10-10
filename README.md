@@ -9,6 +9,7 @@ A small Splitwise-style app for splitting shared expenses in groups. It runs on 
 - Split equally, by exact amounts or by percentage, in 30 currencies. Exchange rates come from the ECB via Frankfurter and can be edited per expense.
 - Balances, suggested settle-ups and recorded payments.
 - Pay with Venmo from the settle-up screen when the person you owe has added their Venmo username. Venmo has no public API, so this opens a pre-filled payment in the Venmo app (or website), and you record the payment yourself once it's sent. USD only.
+- Discord notifications: a group owner can connect a channel webhook, and new, edited and deleted expenses and payments are posted there, @mentioning the people whose balance changed.
 - A dashboard across all your groups, converted to your home currency.
 - CSV export and "Delete my account".
 - Designed for phones first, and can be installed to the home screen.
@@ -77,4 +78,5 @@ One-time setup:
 - Shares are always recalculated on the server. Inputs are validated with Zod and capped (see `LIMITS` in `lib/rules.ts`).
 - A placeholder member can only be claimed by an email Discord has verified, through the invite link. A Discord account can't sign in if its email already belongs to a different Discord account.
 - CSV exports escape formulas. Security headers, including a Content Security Policy and `frame-ancestors 'none'`, are set in `next.config.ts`.
+- Discord webhook URLs are treated as secrets: only the owner can set them, only real `discord.com/api/webhooks/…` URLs are accepted, and the URL is never sent to the browser. Messages allow pings only for the specific users involved (no `@everyone`, `@here` or roles), and user text is markdown-escaped.
 - Sign-in is open to any Discord account with a verified email. The caps in `lib/rules.ts` keep the free database from being filled.

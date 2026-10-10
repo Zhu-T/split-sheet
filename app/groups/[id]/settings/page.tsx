@@ -3,7 +3,7 @@ import { PageMotion } from "@/components/motion";
 import { Card, Page, SectionTitle, Skeleton, TopBar, buttonStyles } from "@/components/ui";
 import { requireMember } from "@/lib/authz";
 import { loadMembers } from "@/lib/queries";
-import { GroupForm, InviteCard, MembersList } from "./settings-forms";
+import { DiscordCard, GroupForm, InviteCard, MembersList } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Group settings" };
 
@@ -51,6 +51,10 @@ async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "pa
             placeholder: m.userId === null,
           }))}
         />
+
+        <SectionTitle>Discord</SectionTitle>
+        {/* Only whether a webhook exists is sent to the browser, never the URL itself. */}
+        <DiscordCard groupId={id} connected={!!group.discordWebhookUrl} isOwner={isOwner} />
 
         <SectionTitle>Group</SectionTitle>
         <Card className="p-4">

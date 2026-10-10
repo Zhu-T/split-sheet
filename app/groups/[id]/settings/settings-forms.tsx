@@ -1,7 +1,17 @@
 "use client";
 
 import { useActionState, useState, useTransition, type CSSProperties } from "react";
-import { addMember, rotateInvite, setMemberActive, updateGroup, updateMember } from "@/app/actions/groups";
+import {
+  addMember,
+  removeDiscordWebhook,
+  rotateInvite,
+  sendTestDiscordMessage,
+  setDiscordWebhook,
+  setMemberActive,
+  updateGroup,
+  updateMember,
+  type WebhookFormState,
+} from "@/app/actions/groups";
 import { CurrencySelect } from "@/components/currency-select";
 import { Sheet } from "@/components/sheet";
 import { Button, Card, ErrorText, Field, Initials, cx, inputClass } from "@/components/ui";
@@ -192,5 +202,90 @@ export function GroupForm({ groupId, name, baseCurrency }: { groupId: string; na
         {pending ? "Saving…" : "Save changes"}
       </Button>
     </form>
+  );
+}
+
+/** Discord channel notifications. The webhook URL is a secret, so it's never shown again once saved. */
+export function DiscordCard({ groupId, connected, isOwner }: { groupId: string; connected: boolean; isOwner: boolean }) {
+  const [state, formAction, pending] = useActionState(setDiscordWebhook.bind(null, groupId), {} as WebhookFormState);
+  const [busy, startTransition] = useTransition();
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
+
+  if (!isOwner) {
+    return (
+      <Card className="p-4">
+        <p className="text-sm text-muted">
+          {connected
+            ? "Expense updates are posted to a Discord channel. Only the group owner can change this."
+            : "Not connected to Discord. The group owner can connect a channel."}
+        </p>
+      </Card>
+    );
+  }
+
+  if (connected) {
+    return (
+      <Card className="p-4">
+        <p className="flex items-center gap-2 font-medium">
+          <span aria-hidden className="size-2 rounded-full bg-owed" />
+          Connected to a Discord channel
+        </p>
+        <p className="mt-1 text-sm text-muted">
+          New, edited and deleted expenses and payments are posted there. People who signed in with Discord get @mentioned
+          when their balance changes.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() =>
+              startTransition(async () => {
+                const r = await sendTestDiscordMessage(groupId);
+                setNote(r.error ? { text: r.error, ok: false } : { text: "Test message sent", ok: true });
+              })
+            }
+          >
+            Send test message
+          </Button>
+          <Button
+            variant="danger"
+            disabled={busy}
+            onClick={() => {
+              if (confirm("Stop posting updates to this Discord channel?")) startTransition(() => removeDiscordWebhook(groupId));
+            }}
+          >
+            Disconnect
+          </Button>
+        </div>
+        {note && (
+          <p role="status" className={cx("toast mt-2 text-sm", note.ok ? "text-owed" : "text-danger")}>
+            {note.text}
+          </p>
+        )}
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-4">
+      <form action={formAction} className="space-y-3">
+        <p className="text-sm text-muted">
+          Post expense updates to a Discord channel. In Discord: <span className="font-medium text-text">Edit Channel → Integrations → Webhooks → New Webhook → Copy Webhook URL</span>, then paste it here.
+        </p>
+        <Field label="Webhook URL">
+          <input
+            name="webhookUrl"
+            type="password"
+            required
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="https://discord.com/api/webhooks/…"
+            className={inputClass}
+          />
+        </Field>
+        <ErrorText>{state.error}</ErrorText>
+        <Button disabled={pending}>{pending ? "Connecting…" : "Connect channel"}</Button>
+      </form>
+    </Card>
   );
 }

@@ -34,6 +34,8 @@ export const groups = pgTable("groups", {
   name: text("name").notNull(),
   baseCurrency: text("base_currency").notNull(),
   inviteToken: text("invite_token").notNull().unique(),
+  // Secret (anyone with it can post to the channel): only the owner can set it; never sent to browsers.
+  discordWebhookUrl: text("discord_webhook_url"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
