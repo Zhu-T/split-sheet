@@ -60,7 +60,6 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
       active: m.active,
       placeholder: m.userId === null,
       venmo: m.venmoUsername,
-      joinedAt: m.userId ? m.joinedAt.toISOString() : null, // shown as "X joined" in activity
     })),
     expenses: expenses.map((e) => ({
       id: e.id,

@@ -19,7 +19,6 @@ export type MemberView = {
   name: string;
   active: boolean;
   placeholder: boolean;
-  joinedAt: string | null;
   venmo: string | null;
 };
 
@@ -396,10 +395,6 @@ function TransferRow({
   );
 }
 
-type ActivityItem =
-  | { type: "expense"; sortKey: string; expense: ExpenseView }
-  | { type: "joined"; sortKey: string; member: MemberView };
-
 function Activity({
   data,
   nameOf,
@@ -410,18 +405,11 @@ function Activity({
   onOpen: (e: ExpenseView) => void;
 }) {
   const [query, setQuery] = useState("");
+  // Newest first by date (expenses already arrive that way; ties keep the most recently added first).
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list: ActivityItem[] = data.expenses
-      .filter((e) => !q || e.description.toLowerCase().includes(q))
-      .map((e) => ({ type: "expense", sortKey: e.date, expense: e }));
-    if (!q) {
-      for (const m of data.members) {
-        if (m.joinedAt) list.push({ type: "joined", sortKey: m.joinedAt.slice(0, 10), member: m });
-      }
-    }
-    return list.sort((a, b) => (a.sortKey < b.sortKey ? 1 : a.sortKey > b.sortKey ? -1 : 0));
-  }, [data.expenses, data.members, query]);
+    return data.expenses.filter((e) => !q || e.description.toLowerCase().includes(q));
+  }, [data.expenses, query]);
 
   return (
     <>
@@ -441,19 +429,9 @@ function Activity({
           <p className="px-4 py-8 text-center text-muted">{query ? "No matches." : "No expenses yet."}</p>
         ) : (
           <ul className="divide-y divide-line">
-            {items.map((item, i) =>
-              item.type === "joined" ? (
-                <li key={`j-${item.member.id}`} className="rise flex min-h-12 items-center gap-3 px-4 py-2 text-sm text-muted" style={{ "--i": i } as CSSProperties}>
-                  <span className="grid size-9 place-items-center">•</span>
-                  <span className="min-w-0 flex-1 truncate">
-                    {nameOf(item.member.id) === "You" ? "You joined" : `${item.member.name} joined`}
-                  </span>
-                  <span className="tabular-nums">{formatDate(item.sortKey)}</span>
-                </li>
-              ) : (
-                <ExpenseRow key={item.expense.id} index={i} e={item.expense} data={data} nameOf={nameOf} onOpen={onOpen} />
-              ),
-            )}
+            {items.map((e, i) => (
+              <ExpenseRow key={e.id} index={i} e={e} data={data} nameOf={nameOf} onOpen={onOpen} />
+            ))}
           </ul>
         )}
       </Card>
