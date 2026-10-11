@@ -326,26 +326,49 @@ function GroupPanel({
         </ul>
         {/* Who pays whom to settle everyone, only when asked for. */}
         {data.transfers.length > 0 && (
-          <div className="border-t border-line">
+          <>
+            {showPayments && (
+              <div className="border-t border-line">
+                <h3 className="px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">Who owes who</h3>
+                <ul className="divide-y divide-line">
+                  {data.transfers.map((t, i) => (
+                    <li
+                      key={t.from + t.to}
+                      className="rise flex items-center gap-3 px-4 py-3"
+                      style={{ "--i": i } as CSSProperties}
+                    >
+                      <div className="min-w-0 flex-1">
+                        {/* Names truncate on narrow screens; the amount always stays visible. */}
+                        <p className="flex min-w-0 items-center gap-1.5 text-[15px] font-medium">
+                          {/* The payer keeps up to half the width so a long recipient name can't squeeze it away. */}
+                          <span className="max-w-[50%] shrink-0 truncate">{nameOf(t.from)}</span>
+                          <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-label="pays">
+                            <path d="M5 12h14M13 6l6 6-6 6" />
+                          </svg>
+                          <span className="truncate">{nameOf(t.to)}</span>
+                        </p>
+                        <Money minor={t.amountMinor} currency={data.base} className="mt-0.5 block text-sm font-semibold text-owe" />
+                      </div>
+                      <Button variant="secondary" className="min-h-10 shrink-0 px-4 text-sm" onClick={() => onSettle(t)}>
+                        Settle
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <button
               type="button"
               aria-expanded={showPayments}
               onClick={() => setShowPayments((v) => !v)}
-              className="flex min-h-11 w-full items-center gap-1.5 px-4 text-sm font-medium text-accent hover:bg-surface-2/60"
+              className="flex min-h-12 w-full items-center justify-center gap-1.5 border-t border-line text-sm font-medium text-accent hover:bg-surface-2/60"
             >
-              <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", showPayments && "rotate-90")} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
-                <path d="M9 6l6 6-6 6" />
-              </svg>
               {showPayments ? "Show less" : "Show more"}
+              <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", showPayments && "rotate-180")} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                <path d="M6 9l6 6 6-6" />
+              </svg>
             </button>
-            {showPayments && (
-              <ul className="space-y-2 px-4 pb-3">
-                {data.transfers.map((t, i) => (
-                  <TransferRow key={t.from + t.to} index={i} t={t} base={data.base} nameOf={nameOf} onSettle={() => onSettle(t)} />
-                ))}
-              </ul>
-            )}
-          </div>
+          </>
         )}
       </Card>
 
