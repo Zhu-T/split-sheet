@@ -1,16 +1,21 @@
-import { auth } from "@/auth";
-import { findActiveMembership } from "@/lib/authz";
+import { z } from "zod";
 import { groupVersion } from "@/lib/queries";
 
 /**
  * The group's current fingerprint, for open group pages to notice other people's changes.
- * Members only; anyone else gets a 404, like the group page itself.
+ *
+ * Served from Vercel's CDN for a few seconds, so however many people have the group open, the
+ * database is asked at most about once per interval per group. Because of that it can't check
+ * membership per person: the proxy still requires a session cookie, the group ID is an
+ * unguessable UUID only members see, and the answer is an opaque hash that reveals nothing
+ * except "something changed".
  */
 export async function GET(_request: Request, { params }: RouteContext<"/api/groups/[id]/version">) {
   const { id } = await params;
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) return new Response("Unauthorized", { status: 401 });
-  if (!(await findActiveMembership(id, userId))) return new Response("Not found", { status: 404 });
-  return Response.json({ version: await groupVersion(id) }, { headers: { "Cache-Control": "no-store" } });
+  if (!z.uuid().safeParse(id).success) return new Response("Not found", { status: 404 });
+  return Response.json(
+    { version: await groupVersion(id) },
+    // Browsers always ask again (no-store in the page's fetch); the CDN keeps it 5 seconds.
+    { headers: { "Cache-Control": "public, max-age=0, s-maxage=5" } },
+  );
 }

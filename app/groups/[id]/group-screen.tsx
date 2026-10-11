@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import { restoreExpense } from "@/app/actions/expenses";
 import { setArchived } from "@/app/actions/groups";
 import { CountUp } from "@/components/count-up";
@@ -74,13 +74,15 @@ const IDLE_AFTER_MS = 10 * 60_000;
  * Keeps the page in step with everyone else's changes: while the tab is visible, it asks the server
  * for the group's fingerprint every few seconds and refreshes the data when it differs. It pauses in
  * background tabs and after 10 idle minutes (so a forgotten tab doesn't keep the database awake),
- * and checks straight away when someone comes back.
+ * and checks straight away when someone comes back. The answer comes from Vercel's CDN (cached a
+ * few seconds), so it can briefly be a version this page already showed; those are ignored.
  */
 function useLiveUpdates(groupId: string, version: string) {
   const router = useRouter();
+  const seen = useRef(new Set<string>());
   useEffect(() => {
+    seen.current.add(version);
     let lastActive = Date.now();
-    let requested = version; // the version we last refreshed for, so one change refreshes once
     let inFlight = false;
 
     async function check() {
@@ -90,8 +92,8 @@ function useLiveUpdates(groupId: string, version: string) {
         const res = await fetch(`/api/groups/${groupId}/version`, { cache: "no-store" });
         if (!res.ok) return;
         const { version: latest } = (await res.json()) as { version: string };
-        if (latest !== requested) {
-          requested = latest;
+        if (!seen.current.has(latest)) {
+          seen.current.add(latest); // refresh once per change
           router.refresh();
         }
       } catch {
@@ -140,6 +142,7 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
   const myNet = data.balances[me] ?? 0;
   const mine = data.transfers.filter((t) => t.from === me || t.to === me);
 
+  const toReview = data.expenses.filter((e) => e.pending && e.splits[0]?.memberId === data.myMemberId);
   const openEntry = (e: ExpenseView | null) => {
     if (e?.kind === "settlement") setSettleSheet((s) => ({ open: true, draft: null, existing: e, key: s.key + 1 }));
     else setExpenseSheet((s) => ({ open: true, expense: e, key: s.key + 1 }));
@@ -202,7 +205,6 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
         {data.isOwner && !data.archived && data.tripOver && data.transfers.length === 0 && data.expenses.length > 0 && (
           <ArchiveSuggestion groupId={data.groupId} />
         )}
-
         {/* Hierarchy: the one number that matters comes first and largest. */}
         <Card className="rise px-5 py-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -240,13 +242,6 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
               )}
             </div>
           </div>
-          {mine.length > 0 && (
-            <ul className="mt-4 space-y-2">
-              {mine.map((t) => (
-                <TransferRow key={t.from + t.to} t={t} base={data.base} nameOf={nameOf} onSettle={() => openSettle(t)} />
-              ))}
-            </ul>
-          )}
           {/* Progressive disclosure on phones: everyone's balances are one tap away. */}
           <details className="group mt-3 md:hidden">
             <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-medium text-accent">
@@ -258,6 +253,8 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
             <div className="mt-2 space-y-4">{panel}</div>
           </details>
         </Card>
+        <ReviewCard payments={toReview} nameOf={nameOf} onOpen={openEntry} />
+        <MySettlements transfers={mine} me={me} base={data.base} nameOf={nameOf} onSettle={openSettle} />
 
         <Activity data={data} nameOf={nameOf} onOpen={openEntry} />
       </div>
@@ -453,34 +450,108 @@ function GroupPanel({
   );
 }
 
-function TransferRow({
-  t,
+/** How many payments to me are waiting for my review; "Show more" lists them, each opening its popup. */
+function ReviewCard({
+  payments,
+  nameOf,
+  onOpen,
+}: {
+  payments: ExpenseView[];
+  nameOf: (id: string) => string;
+  onOpen: (e: ExpenseView) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (payments.length === 0) return null;
+  return (
+    <div className="rise mt-4 overflow-hidden rounded-2xl border border-accent/40 bg-accent/8">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-ink tabular-nums">
+          {payments.length}
+        </span>
+        <span className="min-w-0 flex-1 text-[15px] font-medium">
+          {payments.length === 1 ? "1 payment waiting for your review" : `${payments.length} payments waiting for your review`}
+        </span>
+      </div>
+      {open && (
+        <ul className="divide-y divide-accent/20 border-t border-accent/20">
+          {payments.map((e, i) => (
+            <li key={e.id} className="rise" style={{ "--i": i } as CSSProperties}>
+              <button
+                type="button"
+                onClick={() => onOpen(e)}
+                className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/10"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-medium">{nameOf(e.payerId)}</span>
+                  <span className="block text-sm text-muted">paid you · {formatDate(e.date)}</span>
+                </span>
+                <Money minor={e.amountMinor} currency={e.currency} className="shrink-0 font-semibold" />
+                <span className="shrink-0 text-sm font-medium text-accent">Review</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex min-h-11 w-full items-center justify-center gap-1.5 border-t border-accent/20 text-sm font-medium text-accent transition-colors hover:bg-accent/10"
+      >
+        {open ? "Show less" : "Show more"}
+        <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", open && "rotate-180")} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/** Who I pay and who pays me, one row per person, each with Settle. */
+function MySettlements({
+  transfers,
+  me,
   base,
   nameOf,
   onSettle,
-  index,
 }: {
-  index?: number;
-  t: Transfer;
+  transfers: Transfer[];
+  me: string;
   base: Currency;
   nameOf: (id: string) => string;
-  onSettle: () => void;
+  onSettle: (t: SettleDraft) => void;
 }) {
+  const sections = [
+    { title: "You owe", rows: transfers.filter((t) => t.from === me), other: (t: Transfer) => t.to, tone: "text-owe" },
+    { title: "Owes you", rows: transfers.filter((t) => t.to === me), other: (t: Transfer) => t.from, tone: "text-owed" },
+  ].filter((sec) => sec.rows.length > 0);
+  if (sections.length === 0) return null;
+
   return (
-    <li className={cx("flex items-center gap-3", index !== undefined && "rise")} style={index !== undefined ? ({ "--i": index } as CSSProperties) : undefined}>
-      <span className="min-w-0 flex-1 text-[15px]">
-        {/* Names truncate; the amount always stays fully visible on its own line. */}
-        <span className="block truncate">
-          <span className="font-medium">{nameOf(t.from)}</span>
-          {nameOf(t.from) === "You" ? " owe " : " owes "}
-          <span className="font-medium">{nameOf(t.to)}</span>
-        </span>
-        <Money minor={t.amountMinor} currency={base} className="block font-semibold" />
-      </span>
-      <Button variant="secondary" className="min-h-10 px-3 text-sm" onClick={onSettle}>
-        Settle
-      </Button>
-    </li>
+    <Card className="rise mt-4 overflow-hidden">
+      {sections.map((sec, si) => (
+        <section key={sec.title} className={cx(si > 0 && "border-t border-line")}>
+          <h2 className="px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">{sec.title}</h2>
+          <ul className="divide-y divide-line">
+            {sec.rows.map((t, i) => {
+              const name = nameOf(sec.other(t));
+              return (
+                <li key={t.from + t.to} className="rise flex items-center gap-3 px-4 py-3" style={{ "--i": i } as CSSProperties}>
+                  <Initials name={name} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-medium">{name}</p>
+                    <Money minor={t.amountMinor} currency={base} className={cx("block text-sm font-semibold", sec.tone)} />
+                  </div>
+                  <Button variant="secondary" className="min-h-10 shrink-0 px-4 text-sm" onClick={() => onSettle(t)}>
+                    Settle
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+    </Card>
   );
 }
 
@@ -542,7 +613,7 @@ function Activity({
           className={cx(inputClass, "mb-3")}
         />
       )}
-      <Card>
+      <Card className="overflow-hidden">
         {items.length === 0 ? (
           <p className="px-4 py-8 text-center text-muted">{query ? "No matches." : "No expenses yet."}</p>
         ) : (
@@ -584,13 +655,18 @@ function ExpenseRow({
   // My effect from this entry, in the entry's own currency.
   const myEffect = (e.payerId === me ? e.amountMinor : 0) - myShare;
   const settlement = e.kind === "settlement";
+  // A payment to me that I haven't confirmed yet: highlighted so it stands out in the list.
+  const toReview = settlement && e.pending && e.splits[0]?.memberId === me;
 
   return (
-    <li className="rise" style={{ "--i": index } as CSSProperties}>
+    <li className={cx("rise", toReview && "bg-accent/8")} style={{ "--i": index } as CSSProperties}>
       <button
         type="button"
         onClick={() => onOpen(e)}
-        className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-surface-2/60 active:bg-surface-2"
+        className={cx(
+          "flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-surface-2/60 active:bg-surface-2",
+          toReview && "shadow-[inset_3px_0_0_var(--accent)]",
+        )}
       >
         <span className="w-9 shrink-0 text-center text-xs leading-tight text-muted uppercase tabular-nums">
           {formatDate(e.date).split(" ").map((p) => (
@@ -607,10 +683,12 @@ function ExpenseRow({
             {e.edited && <span className="shrink-0 text-xs text-muted">edited</span>}
           </span>
           {/* Amount first, so on narrow screens only the payer's name gets truncated, never the money. */}
-          <span className="block truncate text-sm text-muted">
+          <span className={cx("block text-sm text-muted", !toReview && "truncate")}>
             {settlement ? (
-              e.pending ? (
-                e.splits[0]?.memberId === data.myMemberId ? "Waiting for you to confirm · tap to review" : `Waiting for ${nameOf(e.splits[0]?.memberId ?? "")} to confirm`
+              toReview ? (
+                <span className="font-medium text-accent">Waiting for you to confirm · tap to review</span>
+              ) : e.pending ? (
+                `Waiting for ${nameOf(e.splits[0]?.memberId ?? "")} to confirm`
               ) : (
                 "Payment"
               )
@@ -632,7 +710,7 @@ function ExpenseRow({
           {settlement ? (
             e.pending ? (
               <>
-                <span className="block text-xs font-medium text-muted">unconfirmed</span>
+                <span className={cx("block text-xs font-medium", toReview ? "text-accent" : "text-muted")}>{toReview ? "to review" : "unconfirmed"}</span>
                 <Money minor={e.amountMinor} currency={e.currency} className="font-semibold" />
               </>
             ) : (
