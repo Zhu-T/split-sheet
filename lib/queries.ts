@@ -1,10 +1,24 @@
 import "server-only";
-import { and, asc, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { computeBalances, type LedgerEntry } from "./balances";
 import { isCurrency, type Currency } from "./currencies";
 import { myDebts, type Counterpart } from "./people";
 import { simplifyDebts } from "./simplify";
+
+/**
+ * A short fingerprint of everything shown on a group's page: expenses (added, edited, deleted,
+ * restored, confirmed), members and group settings. Open pages poll it and refresh when it changes.
+ */
+export async function groupVersion(groupId: string): Promise<string> {
+  const { rows } = await db.execute<{ v: string }>(sql`
+    select md5(concat_ws('|',
+      (select concat_ws(',', count(*), max(updated_at), max(deleted_at), max(confirmed_at)) from expenses where group_id = ${groupId}),
+      (select string_agg(concat_ws(',', id, display_name, active, user_id), ';' order by id) from members where group_id = ${groupId}),
+      (select concat_ws(',', name, base_currency, trip_start, trip_end, archived_at, require_payment_confirmation) from groups where id = ${groupId})
+    )) as v`);
+  return rows[0].v;
+}
 
 export type GroupMemberRow = Awaited<ReturnType<typeof loadMembers>>[number];
 

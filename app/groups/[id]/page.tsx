@@ -6,7 +6,7 @@ import { requireMember } from "@/lib/authz";
 import { isPastTrip, isPendingPayment } from "@/lib/rules";
 import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRates } from "@/lib/fx";
-import { asCurrency, balancesFor, loadExpenses, loadGroupNav, loadMembers } from "@/lib/queries";
+import { asCurrency, balancesFor, groupVersion, loadExpenses, loadGroupNav, loadMembers } from "@/lib/queries";
 import { GroupScreen, type GroupData } from "./group-screen";
 
 export const metadata: Metadata = { title: "Group" };
@@ -32,7 +32,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
   const { id } = await params;
   const { group, member, user } = await requireMember(id);
   const base = asCurrency(group.baseCurrency);
-  const [members, expenses, myGroups] = await Promise.all([loadMembers(id), loadExpenses(id), loadGroupNav(user.id)]);
+  const [members, expenses, myGroups, version] = await Promise.all([loadMembers(id), loadExpenses(id), loadGroupNav(user.id), groupVersion(id)]);
   const { balances, transfers } = balancesFor(expenses, base);
 
   // Suggested rates for entering foreign-currency expenses (base units per 1 unit of X).
@@ -46,6 +46,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
 
   const data: GroupData = {
     groupId: group.id,
+    version,
     groupName: group.name,
     requireConfirmation: group.requirePaymentConfirmation,
     archived: !!group.archivedAt,

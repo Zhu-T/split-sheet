@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { deleteExpense, saveExpense } from "@/app/actions/expenses";
+import { confirmPayment, deleteExpense, saveExpense } from "@/app/actions/expenses";
 import { DateField } from "@/components/calendar";
 import { HistorySection } from "@/components/history-section";
 import { useConfirm } from "@/components/confirm";
@@ -80,6 +80,34 @@ export function SettleSheet({
     });
   }
 
+  // A payment someone else recorded as paid to me, still waiting for me to confirm it.
+  const awaitingMe = !!existing?.pending && existing.splits[0]?.memberId === data.myMemberId;
+
+  function confirmReceived() {
+    if (!existing) return;
+    startTransition(async () => {
+      const result = await confirmPayment(data.groupId, existing.id);
+      if (result.error) setError(result.error);
+      else onDone("Payment confirmed");
+    });
+  }
+
+  async function notReceived() {
+    if (!existing) return;
+    const ok = await confirm({
+      title: "Payment not received?",
+      message: `This removes the payment ${label(existing.payerId)} recorded, and balances go back to how they were before it.`,
+      confirmLabel: "Remove payment",
+      destructive: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await deleteExpense(data.groupId, existing.id);
+      if (result.error) setError(result.error);
+      else onDone("Payment removed", result.deletedId);
+    });
+  }
+
   return (
     <>
       {confirmDialog}
@@ -100,9 +128,24 @@ export function SettleSheet({
             submit();
           }}
         >
-          <p className="text-muted">
-            Record money that changed hands outside the app, like cash or a bank transfer.
-          </p>
+          {awaitingMe && existing ? (
+            <div className="rounded-2xl border border-accent/40 bg-accent/5 p-4">
+              <p className="text-[15px]">
+                <span className="font-medium">{label(existing.payerId)}</span> says they paid you{" "}
+                <span className="font-semibold">{formatMoney(existing.amountMinor, existing.currency)}</span>. Did you get it?
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button type="button" variant="secondary" className="min-h-11 px-2 text-sm whitespace-nowrap" onClick={notReceived} disabled={pending}>
+                  Not received
+                </Button>
+                <Button type="button" className="min-h-11 px-3 text-sm" onClick={confirmReceived} disabled={pending}>
+                  Confirm
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-muted">Record money that changed hands outside the app, like cash or a bank transfer.</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="From">
               <select value={from} onChange={(e) => setFrom(e.target.value)} className={inputClass}>

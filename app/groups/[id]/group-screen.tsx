@@ -1,10 +1,9 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type CSSProperties, type ReactNode } from "react";
-import { confirmPayment, deleteExpense, restoreExpense } from "@/app/actions/expenses";
+import { restoreExpense } from "@/app/actions/expenses";
 import { setArchived } from "@/app/actions/groups";
-import { useConfirm } from "@/components/confirm";
 import { CountUp } from "@/components/count-up";
 import { Button, Card, Initials, Money, cx, inputClass } from "@/components/ui";
 import type { Currency } from "@/lib/currencies";
@@ -42,6 +41,8 @@ export type ExpenseView = {
 
 export type GroupData = {
   groupId: string;
+  /** Fingerprint of the group's data; when the server's changes, the page refreshes (see useLiveUpdates). */
+  version: string;
   groupName: string;
   /** Payments recorded by the payer wait for the recipient to confirm them. */
   requireConfirmation: boolean;
@@ -65,7 +66,66 @@ type SettleDraft = { from: string; to: string; amountMinor: number };
 type ExpenseSheetState = { open: boolean; expense: ExpenseView | null; key: number };
 type SettleSheetState = { open: boolean; draft: SettleDraft | null; existing: ExpenseView | null; key: number };
 
+/** How often an open group page checks for other people's changes, and when it stops checking. */
+const POLL_MS = 10_000;
+const IDLE_AFTER_MS = 10 * 60_000;
+
+/**
+ * Keeps the page in step with everyone else's changes: while the tab is visible, it asks the server
+ * for the group's fingerprint every few seconds and refreshes the data when it differs. It pauses in
+ * background tabs and after 10 idle minutes (so a forgotten tab doesn't keep the database awake),
+ * and checks straight away when someone comes back.
+ */
+function useLiveUpdates(groupId: string, version: string) {
+  const router = useRouter();
+  useEffect(() => {
+    let lastActive = Date.now();
+    let requested = version; // the version we last refreshed for, so one change refreshes once
+    let inFlight = false;
+
+    async function check() {
+      if (document.hidden || inFlight || Date.now() - lastActive > IDLE_AFTER_MS) return;
+      inFlight = true;
+      try {
+        const res = await fetch(`/api/groups/${groupId}/version`, { cache: "no-store" });
+        if (!res.ok) return;
+        const { version: latest } = (await res.json()) as { version: string };
+        if (latest !== requested) {
+          requested = latest;
+          router.refresh();
+        }
+      } catch {
+        // Offline or a blip: try again next time.
+      } finally {
+        inFlight = false;
+      }
+    }
+    function wake() {
+      const wasIdle = Date.now() - lastActive > IDLE_AFTER_MS;
+      lastActive = Date.now();
+      if (wasIdle) void check();
+    }
+    function onVisible() {
+      if (document.hidden) return;
+      lastActive = Date.now();
+      void check();
+    }
+
+    const timer = setInterval(check, POLL_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    for (const e of ["pointerdown", "keydown", "scroll"] as const) window.addEventListener(e, wake, { passive: true });
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      for (const e of ["pointerdown", "keydown", "scroll"] as const) window.removeEventListener(e, wake);
+    };
+  }, [groupId, version, router]);
+}
+
 export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode }) {
+  useLiveUpdates(data.groupId, data.version);
   // Sheets stay mounted while closing so they can animate out; `key` resets their form on each open.
   const [expenseSheet, setExpenseSheet] = useState<ExpenseSheetState>({ open: false, expense: null, key: 0 });
   const [settleSheet, setSettleSheet] = useState<SettleSheetState>({ open: false, draft: null, existing: null, key: 0 });
@@ -142,7 +202,6 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
         {data.isOwner && !data.archived && data.tripOver && data.transfers.length === 0 && data.expenses.length > 0 && (
           <ArchiveSuggestion groupId={data.groupId} />
         )}
-        <PendingForMe data={data} nameOf={nameOf} onDone={done} />
 
         {/* Hierarchy: the one number that matters comes first and largest. */}
         <Card className="rise px-5 py-5">
@@ -551,7 +610,7 @@ function ExpenseRow({
           <span className="block truncate text-sm text-muted">
             {settlement ? (
               e.pending ? (
-                e.splits[0]?.memberId === data.myMemberId ? "Waiting for you to confirm" : `Waiting for ${nameOf(e.splits[0]?.memberId ?? "")} to confirm`
+                e.splits[0]?.memberId === data.myMemberId ? "Waiting for you to confirm · tap to review" : `Waiting for ${nameOf(e.splits[0]?.memberId ?? "")} to confirm`
               ) : (
                 "Payment"
               )
@@ -605,75 +664,6 @@ function tripLabel(trip: { start: string | null; end: string | null }) {
   const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   if (trip.start && trip.end) return `${day(trip.start)} – ${day(trip.end)}`;
   return trip.start ? `From ${day(trip.start)}` : `Until ${day(trip.end!)}`;
-}
-
-/** Payments others recorded as paid to me, waiting for me to confirm (or reject) them. */
-function PendingForMe({
-  data,
-  nameOf,
-  onDone,
-}: {
-  data: GroupData;
-  nameOf: (id: string) => string;
-  onDone: (message?: string, undoId?: string) => void;
-}) {
-  const [busy, startTransition] = useTransition();
-  const [confirm, confirmDialog] = useConfirm();
-  const pending = data.expenses.filter((e) => e.pending && e.splits[0]?.memberId === data.myMemberId);
-  if (pending.length === 0) return null;
-
-  return (
-    <Card className="rise mb-4 border-accent/40 p-4">
-      <h2 className="font-semibold">Confirm payments</h2>
-      <p className="mt-0.5 text-sm text-muted">
-        These already count towards balances. Confirm you received them, or mark one as not received to undo it.
-      </p>
-      <ul className="mt-3 space-y-3">
-        {pending.map((e) => (
-          <li key={e.id} className="space-y-2">
-            <p className="text-[15px] break-words">
-              <span className="font-medium">{nameOf(e.payerId)}</span> says they paid you{" "}
-              <Money minor={e.amountMinor} currency={e.currency} className="font-semibold" />
-            </p>
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-              <Button
-                variant="secondary"
-                className="min-h-11 px-2 text-sm whitespace-nowrap"
-                disabled={busy}
-                onClick={async () => {
-                  const ok = await confirm({
-                    title: "Payment not received?",
-                    message: `This removes the payment ${nameOf(e.payerId)} recorded, and balances go back to how they were before it.`,
-                    confirmLabel: "Remove payment",
-                    destructive: true,
-                  });
-                  if (ok) startTransition(async () => {
-                    const r = await deleteExpense(data.groupId, e.id);
-                    onDone(r.error ?? "Payment removed", r.deletedId);
-                  });
-                }}
-              >
-                Not received
-              </Button>
-              <Button
-                className="min-h-11 px-3 text-sm"
-                disabled={busy}
-                onClick={() =>
-                  startTransition(async () => {
-                    const r = await confirmPayment(data.groupId, e.id);
-                    onDone(r.error ?? "Payment confirmed");
-                  })
-                }
-              >
-                Confirm
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
-      {confirmDialog}
-    </Card>
-  );
 }
 
 /** Shown on archived trips. The owner can unarchive from here. */
