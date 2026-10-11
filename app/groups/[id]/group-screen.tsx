@@ -6,7 +6,7 @@ import { confirmPayment, deleteExpense, restoreExpense } from "@/app/actions/exp
 import { setArchived } from "@/app/actions/groups";
 import { useConfirm } from "@/components/confirm";
 import { CountUp } from "@/components/count-up";
-import { Button, Card, Initials, Money, SectionTitle, cx, inputClass } from "@/components/ui";
+import { Button, Card, Initials, Money, cx, inputClass } from "@/components/ui";
 import type { Currency } from "@/lib/currencies";
 import { convert } from "@/lib/money";
 import type { Transfer } from "@/lib/simplify";
@@ -79,7 +79,6 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
   const archived = data.archived;
   const myNet = data.balances[me] ?? 0;
   const mine = data.transfers.filter((t) => t.from === me || t.to === me);
-  const others = data.transfers.filter((t) => t.from !== me && t.to !== me);
 
   const openEntry = (e: ExpenseView | null) => {
     if (e?.kind === "settlement") setSettleSheet((s) => ({ open: true, draft: null, existing: e, key: s.key + 1 }));
@@ -125,7 +124,7 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
     return () => window.removeEventListener("keydown", onKey);
   }, [archived]);
 
-  const panel = <GroupPanel data={data} nameOf={nameOf} others={others} onSettle={openSettle} />;
+  const panel = <GroupPanel data={data} nameOf={nameOf} onSettle={openSettle} />;
 
   return (
     // Phones: one column. Tablets: activity + balances panel. Desktop: groups nav on the left too.
@@ -201,7 +200,6 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
           </details>
         </Card>
 
-        <SectionTitle>Activity</SectionTitle>
         <Activity data={data} nameOf={nameOf} onOpen={openEntry} />
       </div>
 
@@ -267,19 +265,18 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
   );
 }
 
-/** Every member's balance, suggested payments between others, and spending totals. */
+/** Every member's balance (with who owes whom behind a button) and spending totals. */
 function GroupPanel({
   data,
   nameOf,
-  others,
   onSettle,
 }: {
   data: GroupData;
   nameOf: (id: string) => string;
-  others: Transfer[];
   onSettle: (t: SettleDraft) => void;
 }) {
   const me = data.myMemberId;
+  const [showPayments, setShowPayments] = useState(false);
   // Me first, then whoever is furthest from settled.
   const rows = data.members
     .map((m) => ({ ...m, net: data.balances[m.id] ?? 0 }))
@@ -327,20 +324,30 @@ function GroupPanel({
             </li>
           ))}
         </ul>
+        {/* Who pays whom to settle everyone, only when asked for. */}
+        {data.transfers.length > 0 && (
+          <div className="border-t border-line">
+            <button
+              type="button"
+              aria-expanded={showPayments}
+              onClick={() => setShowPayments((v) => !v)}
+              className="flex min-h-11 w-full items-center gap-1.5 px-4 text-sm font-medium text-accent hover:bg-surface-2/60"
+            >
+              <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", showPayments && "rotate-90")} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+              {showPayments ? "Hide who owes who" : `Show who owes who (${data.transfers.length})`}
+            </button>
+            {showPayments && (
+              <ul className="space-y-2 px-4 pb-3">
+                {data.transfers.map((t, i) => (
+                  <TransferRow key={t.from + t.to} index={i} t={t} base={data.base} nameOf={nameOf} onSettle={() => onSettle(t)} />
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </Card>
-
-      {others.length > 0 && (
-        <Card className="overflow-hidden">
-          <h2 className="border-b border-line px-4 py-3 text-xs font-semibold tracking-wide text-muted uppercase">
-            Suggested payments
-          </h2>
-          <ul className="space-y-2 px-4 py-3">
-            {others.map((t, i) => (
-              <TransferRow key={t.from + t.to} index={i} t={t} base={data.base} nameOf={nameOf} onSettle={() => onSettle(t)} />
-            ))}
-          </ul>
-        </Card>
-      )}
 
       <Card className="overflow-hidden">
         <h2 className="border-b border-line px-4 py-3 text-xs font-semibold tracking-wide text-muted uppercase">Spending</h2>
@@ -395,6 +402,9 @@ function TransferRow({
   );
 }
 
+/** Activity rows shown at first, and added per "Show more". */
+const PAGE = 10;
+
 function Activity({
   data,
   nameOf,
@@ -405,20 +415,46 @@ function Activity({
   onOpen: (e: ExpenseView) => void;
 }) {
   const [query, setQuery] = useState("");
-  // Newest first by date (expenses already arrive that way; ties keep the most recently added first).
+  const [newestFirst, setNewestFirst] = useState(true);
+  const [limit, setLimit] = useState(PAGE);
+  // Expenses arrive newest first (by date, then most recently added); oldest first is the reverse.
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return data.expenses.filter((e) => !q || e.description.toLowerCase().includes(q));
-  }, [data.expenses, query]);
+    const list = data.expenses.filter((e) => !q || e.description.toLowerCase().includes(q));
+    return newestFirst ? list : [...list].reverse();
+  }, [data.expenses, query, newestFirst]);
+  const shown = items.slice(0, limit);
 
   return (
     <>
+      <div className="mt-6 mb-2 flex items-center justify-between px-1">
+        <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">Activity</h2>
+        {data.expenses.length > 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              setNewestFirst((v) => !v);
+              setLimit(PAGE);
+            }}
+            aria-label={newestFirst ? "Sorted newest first. Switch to oldest first" : "Sorted oldest first. Switch to newest first"}
+            className="-mr-2 flex min-h-10 items-center gap-1 rounded-full px-2 text-xs font-medium text-muted transition hover:bg-surface-2"
+          >
+            {newestFirst ? "Newest first" : "Oldest first"}
+            <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", !newestFirst && "rotate-180")} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 5v14M6 13l6 6 6-6" />
+            </svg>
+          </button>
+        )}
+      </div>
       {data.expenses.length > 8 && (
         <input
           id="activity-search"
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setLimit(PAGE);
+          }}
           placeholder="Search expenses"
           aria-keyshortcuts="/"
           className={cx(inputClass, "mb-3")}
@@ -429,10 +465,19 @@ function Activity({
           <p className="px-4 py-8 text-center text-muted">{query ? "No matches." : "No expenses yet."}</p>
         ) : (
           <ul className="divide-y divide-line">
-            {items.map((e, i) => (
-              <ExpenseRow key={e.id} index={i} e={e} data={data} nameOf={nameOf} onOpen={onOpen} />
+            {shown.map((e, i) => (
+              <ExpenseRow key={e.id} index={i % PAGE} e={e} data={data} nameOf={nameOf} onOpen={onOpen} />
             ))}
           </ul>
+        )}
+        {items.length > shown.length && (
+          <button
+            type="button"
+            onClick={() => setLimit((n) => n + PAGE)}
+            className="flex min-h-12 w-full items-center justify-center border-t border-line text-sm font-medium text-accent hover:bg-surface-2/60"
+          >
+            Show more ({items.length - shown.length} more)
+          </button>
         )}
       </Card>
     </>
