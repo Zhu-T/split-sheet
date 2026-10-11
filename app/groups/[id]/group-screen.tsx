@@ -336,7 +336,7 @@ function GroupPanel({
               <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", showPayments && "rotate-90")} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
                 <path d="M9 6l6 6-6 6" />
               </svg>
-              {showPayments ? "Hide who owes who" : `Show who owes who (${data.transfers.length})`}
+              {showPayments ? "Show less" : "Show more"}
             </button>
             {showPayments && (
               <ul className="space-y-2 px-4 pb-3">
