@@ -242,8 +242,9 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
             </div>
             {/* Wider screens: primary actions sit with the balance instead of floating. */}
             <div className="hidden gap-2 md:flex">
-              <Button variant="secondary" onClick={() => openSettle(mine[0] ?? null)}>
-                Settle up
+              {/* A blank payment form (no amount or suggested person filled in); Settle on a row pre-fills. */}
+              <Button variant="secondary" onClick={() => openSettle(null)}>
+                Record a payment
               </Button>
               {!data.archived && (
                 <Button onClick={() => openEntry(null)} aria-keyshortcuts="n" title="Add expense (N)">
@@ -507,7 +508,7 @@ function MySettlements({
   );
 }
 
-/** Activity rows shown at first, and added per "Show more". */
+/** Activity rows shown at first. Each "Show more" doubles what's shown (10, 20, 40, 80…), so even a long list is a few taps away. */
 const PAGE = 10;
 
 function Activity({
@@ -578,10 +579,10 @@ function Activity({
         {items.length > shown.length && (
           <button
             type="button"
-            onClick={() => setLimit((n) => n + PAGE)}
+            onClick={() => setLimit((n) => n * 2)}
             className="flex min-h-12 w-full items-center justify-center border-t border-line text-sm font-medium text-accent hover:bg-surface-2/60"
           >
-            Show more ({items.length - shown.length} more)
+            {items.length - shown.length <= limit ? `Show all (${items.length - shown.length} more)` : `Show ${limit} more`}
           </button>
         )}
       </Card>
