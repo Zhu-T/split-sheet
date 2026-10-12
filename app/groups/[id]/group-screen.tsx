@@ -482,8 +482,12 @@ function ReviewCard({
                 className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/10"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-medium">{nameOf(e.payerId)}</span>
-                  <span className="block text-sm text-muted">paid you · {formatDate(e.date)}</span>
+                  {/* Only the name shortens ("Alexandra Mo… paid you"); the rest stays visible. */}
+                  <span className="flex min-w-0 text-[15px] font-medium">
+                    <span className="truncate">{nameOf(e.payerId)}</span>
+                    <span className="shrink-0 whitespace-pre"> paid you</span>
+                  </span>
+                  <span className="block text-sm text-muted">{formatDate(e.date)}</span>
                 </span>
                 <Money minor={e.amountMinor} currency={e.currency} className="shrink-0 font-semibold" />
                 <span className="shrink-0 text-sm font-medium text-accent">Review</span>
@@ -677,9 +681,18 @@ function ExpenseRow({
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-baseline gap-1.5">
-            <span className="truncate font-medium">
-              {settlement ? `${nameOf(e.payerId)} paid ${nameOf(e.splits[0]?.memberId ?? "")}` : e.description}
-            </span>
+            {settlement ? (
+              // Each name shortens on its own, so "paid" always stays visible.
+              <span className="flex min-w-0 font-medium">
+                <span className={cx("truncate", nameOf(e.payerId) === "You" && "shrink-0")}>{nameOf(e.payerId)}</span>
+                <span className="shrink-0 whitespace-pre"> paid </span>
+                <span className={cx("truncate", nameOf(e.splits[0]?.memberId ?? "") === "You" && "shrink-0")}>
+                  {nameOf(e.splits[0]?.memberId ?? "")}
+                </span>
+              </span>
+            ) : (
+              <span className="truncate font-medium">{e.description}</span>
+            )}
             {e.edited && <span className="shrink-0 text-xs text-muted">edited</span>}
           </span>
           {/* Amount first, so on narrow screens only the payer's name gets truncated, never the money. */}

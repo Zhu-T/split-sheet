@@ -51,7 +51,7 @@ async function Join({ params }: Pick<PageProps<"/join/[token]">, "params">) {
   return (
     <Card className="px-5 py-8 text-center">
       <p className="text-sm text-muted">You&apos;re invited to</p>
-      <h2 className="mt-1 text-2xl font-semibold break-words">{group.name}</h2>
+      <h2 className="mt-1 truncate text-2xl font-semibold">{group.name}</h2>
       <p className="mt-1 text-muted">
         {n} {n === 1 ? "member" : "members"}
       </p>

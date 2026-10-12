@@ -131,7 +131,7 @@ export function SettleSheet({
           {awaitingMe && existing ? (
             <div className="rounded-2xl border border-accent/40 bg-accent/5 p-4">
               <p className="text-[15px]">
-                <span className="font-medium">{label(existing.payerId)}</span> says they paid you{" "}
+                <span className="inline-block max-w-[12rem] truncate align-bottom font-medium">{label(existing.payerId)}</span> says they paid you{" "}
                 <span className="font-semibold">{formatMoney(existing.amountMinor, existing.currency)}</span>. Did you get it?
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -189,7 +189,7 @@ export function SettleSheet({
           {from === to && <p className="text-sm text-muted">Pick two different people.</p>}
         {data.requireConfirmation && to && from !== to && to !== data.myMemberId && (
           <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">
-            It counts straight away. {label(to)} will be asked to confirm they received it.
+            It counts straight away. <span className="inline-block max-w-[12rem] truncate align-bottom">{label(to)}</span> will be asked to confirm they received it.
           </p>
         )}
           <ErrorText>{error}</ErrorText>
@@ -227,7 +227,7 @@ function VenmoPay({
 }) {
   if (!recipient) return null;
   if (!recipient.venmo) {
-    return <p className="text-sm text-muted">{recipient.name} hasn&apos;t added a Venmo username yet.</p>;
+    return <p className="text-sm text-muted"><span className="inline-block max-w-[12rem] truncate align-bottom">{recipient.name}</span> hasn&apos;t added a Venmo username yet.</p>;
   }
   const minor = parseAmount(amount || "", "USD");
   const venmo = recipient.venmo;
