@@ -8,6 +8,7 @@ import { CURRENCY_CODES, type Currency } from "@/lib/currencies";
 import { getRates } from "@/lib/fx";
 import { asCurrency, balancesFor, groupVersion, loadExpenses, loadGroupNav, loadMembers } from "@/lib/queries";
 import { GroupScreen, type GroupData } from "./group-screen";
+import { ReviewBell, type ReviewItem } from "./review-bell";
 
 export const metadata: Metadata = { title: "Group" };
 
@@ -82,6 +83,12 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
     fxRates,
   };
 
+  // Payments others recorded as paid to me that I haven't confirmed (the top-bar bell's badge).
+  const nameById = new Map(members.map((m) => [m.id, m.displayName]));
+  const toReview: ReviewItem[] = expenses
+    .filter((e) => isPendingPayment(e) && e.splits[0]?.memberId === member.id)
+    .map((e) => ({ id: e.id, payerName: nameById.get(e.payerMemberId) ?? "Someone", amountMinor: e.amountMinor, currency: e.currency, date: e.date }));
+
   return (
     <>
       <TopBar
@@ -89,14 +96,17 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
         title={group.name}
         back="/"
         action={
-          <Link
-            href={`/groups/${group.id}/settings`}
-            transitionTypes={["nav-forward"]}
-            aria-label="Group settings"
-            className="grid size-11 place-items-center rounded-full text-muted transition active:scale-90"
-          >
-            <SettingsIcon />
-          </Link>
+          <>
+            {(group.requirePaymentConfirmation || toReview.length > 0) && <ReviewBell items={toReview} />}
+            <Link
+              href={`/groups/${group.id}/settings`}
+              transitionTypes={["nav-forward"]}
+              aria-label="Group settings"
+              className="grid size-11 place-items-center rounded-full text-muted transition active:scale-90"
+            >
+              <SettingsIcon />
+            </Link>
+          </>
         }
       />
       <Page wide>

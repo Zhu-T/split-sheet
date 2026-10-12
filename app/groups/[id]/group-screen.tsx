@@ -11,6 +11,7 @@ import { convert } from "@/lib/money";
 import type { Transfer } from "@/lib/simplify";
 import type { SplitType } from "@/lib/split";
 import { ExpenseSheet } from "./expense-sheet";
+import { OPEN_PAYMENT_EVENT } from "./review-bell";
 import { SettleSheet } from "./settle-sheet";
 
 export type MemberView = {
@@ -141,8 +142,8 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
   const archived = data.archived;
   const myNet = data.balances[me] ?? 0;
   const mine = data.transfers.filter((t) => t.from === me || t.to === me);
+  const iOwe = mine.filter((t) => t.from === me);
 
-  const toReview = data.expenses.filter((e) => e.pending && e.splits[0]?.memberId === data.myMemberId);
   const openEntry = (e: ExpenseView | null) => {
     if (e?.kind === "settlement") setSettleSheet((s) => ({ open: true, draft: null, existing: e, key: s.key + 1 }));
     else setExpenseSheet((s) => ({ open: true, expense: e, key: s.key + 1 }));
@@ -159,6 +160,16 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
       const r = await restoreExpense(data.groupId, expenseId);
       setToast({ id: Date.now(), text: r.error ?? "Restored" });
     });
+
+  // The review bell in the top bar asks for a payment's popup to be opened.
+  useEffect(() => {
+    function onOpenPayment(ev: Event) {
+      const e = data.expenses.find((x) => x.id === (ev as CustomEvent<string>).detail);
+      if (e) setSettleSheet((s) => ({ open: true, draft: null, existing: e, key: s.key + 1 }));
+    }
+    window.addEventListener(OPEN_PAYMENT_EVENT, onOpenPayment);
+    return () => window.removeEventListener(OPEN_PAYMENT_EVENT, onOpenPayment);
+  }, [data.expenses]);
 
   useEffect(() => {
     if (!toast) return;
@@ -253,8 +264,7 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
             <div className="mt-2 space-y-4">{panel}</div>
           </details>
         </Card>
-        <ReviewCard payments={toReview} nameOf={nameOf} onOpen={openEntry} />
-        <MySettlements transfers={mine} me={me} base={data.base} nameOf={nameOf} onSettle={openSettle} />
+        <MySettlements transfers={iOwe} base={data.base} nameOf={nameOf} onSettle={openSettle} />
 
         <Activity data={data} nameOf={nameOf} onOpen={openEntry} />
       </div>
@@ -450,111 +460,39 @@ function GroupPanel({
   );
 }
 
-/** How many payments to me are waiting for my review; "Show more" lists them, each opening its popup. */
-function ReviewCard({
-  payments,
-  nameOf,
-  onOpen,
-}: {
-  payments: ExpenseView[];
-  nameOf: (id: string) => string;
-  onOpen: (e: ExpenseView) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  if (payments.length === 0) return null;
-  return (
-    <div className="rise mt-4 overflow-hidden rounded-2xl border border-accent/40 bg-accent/8">
-      <div className="flex items-center gap-3 px-4 py-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-ink tabular-nums">
-          {payments.length}
-        </span>
-        <span className="min-w-0 flex-1 text-[15px] font-medium">
-          {payments.length === 1 ? "1 payment waiting for your review" : `${payments.length} payments waiting for your review`}
-        </span>
-      </div>
-      {open && (
-        <ul className="divide-y divide-accent/20 border-t border-accent/20">
-          {payments.map((e, i) => (
-            <li key={e.id} className="rise" style={{ "--i": i } as CSSProperties}>
-              <button
-                type="button"
-                onClick={() => onOpen(e)}
-                className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/10"
-              >
-                <span className="min-w-0 flex-1">
-                  {/* Only the name shortens ("Alexandra Mo… paid you"); the rest stays visible. */}
-                  <span className="flex min-w-0 text-[15px] font-medium">
-                    <span className="truncate">{nameOf(e.payerId)}</span>
-                    <span className="shrink-0 whitespace-pre"> paid you</span>
-                  </span>
-                  <span className="block text-sm text-muted">{formatDate(e.date)}</span>
-                </span>
-                <Money minor={e.amountMinor} currency={e.currency} className="shrink-0 font-semibold" />
-                <span className="shrink-0 text-sm font-medium text-accent">Review</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-11 w-full items-center justify-center gap-1.5 border-t border-accent/20 text-sm font-medium text-accent transition-colors hover:bg-accent/10"
-      >
-        {open ? "Show less" : "Show more"}
-        <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", open && "rotate-180")} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
-    </div>
-  );
-}
-
-/** Who I pay and who pays me, one row per person, each with Settle. */
+/** Who I still need to pay, one row per person, each with Settle. */
 function MySettlements({
   transfers,
-  me,
   base,
   nameOf,
   onSettle,
 }: {
   transfers: Transfer[];
-  me: string;
   base: Currency;
   nameOf: (id: string) => string;
   onSettle: (t: SettleDraft) => void;
 }) {
-  const sections = [
-    { title: "You owe", rows: transfers.filter((t) => t.from === me), other: (t: Transfer) => t.to, tone: "text-owe" },
-    { title: "Owes you", rows: transfers.filter((t) => t.to === me), other: (t: Transfer) => t.from, tone: "text-owed" },
-  ].filter((sec) => sec.rows.length > 0);
-  if (sections.length === 0) return null;
-
+  if (transfers.length === 0) return null;
   return (
     <Card className="rise mt-4 overflow-hidden">
-      {sections.map((sec, si) => (
-        <section key={sec.title} className={cx(si > 0 && "border-t border-line")}>
-          <h2 className="px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">{sec.title}</h2>
-          <ul className="divide-y divide-line">
-            {sec.rows.map((t, i) => {
-              const name = nameOf(sec.other(t));
-              return (
-                <li key={t.from + t.to} className="rise flex items-center gap-3 px-4 py-3" style={{ "--i": i } as CSSProperties}>
-                  <Initials name={name} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-medium">{name}</p>
-                    <Money minor={t.amountMinor} currency={base} className={cx("block text-sm font-semibold", sec.tone)} />
-                  </div>
-                  <Button variant="secondary" className="min-h-10 shrink-0 px-4 text-sm" onClick={() => onSettle(t)}>
-                    Settle
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
+      <h2 className="px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">You owe</h2>
+      <ul className="divide-y divide-line">
+        {transfers.map((t, i) => {
+          const name = nameOf(t.to);
+          return (
+            <li key={t.from + t.to} className="rise flex items-center gap-3 px-4 py-3" style={{ "--i": i } as CSSProperties}>
+              <Initials name={name} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-medium">{name}</p>
+                <Money minor={t.amountMinor} currency={base} className="block text-sm font-semibold text-owe" />
+              </div>
+              <Button variant="secondary" className="min-h-10 shrink-0 px-4 text-sm" onClick={() => onSettle(t)}>
+                Settle
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
 }
