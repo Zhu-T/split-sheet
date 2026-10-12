@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/confirm";
 import { Sheet } from "@/components/sheet";
 import { Button, ErrorText, Field, inputClass } from "@/components/ui";
 import { formatMoney, parseAmount, toDecimalString } from "@/lib/money";
+import { isAuthor } from "@/lib/rules";
 import { venmoPayUrl } from "@/lib/venmo";
 import type { ExpenseView, GroupData, MemberView } from "./group-screen";
 
@@ -80,6 +81,11 @@ export function SettleSheet({
     });
   }
 
+  // Only whoever recorded a payment can edit or delete it; everyone else sees it read-only.
+  const me = { id: data.myMemberId, role: data.isOwner ? ("owner" as const) : ("member" as const) };
+  const readOnly = !!existing && !isAuthor(existing.authorId, me);
+  const authorName = existing?.authorId ? label(existing.authorId) : "the group owner";
+
   // A payment someone else recorded as paid to me, still waiting for me to confirm it.
   const awaitingMe = !!existing?.pending && existing.splits[0]?.memberId === data.myMemberId;
 
@@ -114,18 +120,24 @@ export function SettleSheet({
       <Sheet
         open={open}
         onClose={onClose}
-        title={existing ? "Edit payment" : "Record a payment"}
+        title={readOnly ? "Payment" : existing ? "Edit payment" : "Record a payment"}
         footer={
-          <Button type="button" className="w-full" onClick={submit} disabled={pending || !to || from === to}>
-            {pending ? "Saving…" : existing ? "Save changes" : venmoOpened ? "I paid. Record payment" : "Record payment"}
-          </Button>
+          readOnly ? (
+            <p className="pb-1 text-center text-sm text-muted">
+              Only {authorName === "You" ? "you" : authorName} can edit or delete this payment.
+            </p>
+          ) : (
+            <Button type="button" className="w-full" onClick={submit} disabled={pending || !to || from === to}>
+              {pending ? "Saving…" : existing ? "Save changes" : venmoOpened ? "I paid. Record payment" : "Record payment"}
+            </Button>
+          )
         }
       >
         <form
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            submit();
+            if (!readOnly) submit();
           }}
         >
           {awaitingMe && existing ? (
@@ -146,55 +158,57 @@ export function SettleSheet({
           ) : (
             <p className="text-muted">Record money that changed hands outside the app, like cash or a bank transfer.</p>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="From">
-              <select value={from} onChange={(e) => setFrom(e.target.value)} className={inputClass}>
-                {options.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {label(m.id)}
-                  </option>
-                ))}
-              </select>
+          <fieldset disabled={readOnly} className="mx-0 min-w-0 space-y-4 border-0 p-0">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="From">
+                <select value={from} onChange={(e) => setFrom(e.target.value)} className={inputClass}>
+                  {options.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {label(m.id)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="To">
+                <select value={to} onChange={(e) => setTo(e.target.value)} className={inputClass}>
+                  {options.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {label(m.id)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <Field label={`Amount (${currency})`}>
+              <input
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="h-16 w-full rounded-xl border border-line bg-surface px-3 text-3xl font-semibold tabular-nums outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/20"
+              />
             </Field>
-            <Field label="To">
-              <select value={to} onChange={(e) => setTo(e.target.value)} className={inputClass}>
-                {options.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {label(m.id)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <Field label={`Amount (${currency})`}>
-            <input
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              className="h-16 w-full rounded-xl border border-line bg-surface px-3 text-3xl font-semibold tabular-nums outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/20"
-            />
-          </Field>
-          {/* Venmo is USD-only, and only the person paying can send money from their own account. */}
-          {!existing && from === data.myMemberId && to && to !== from && currency === "USD" && (
-            <VenmoPay
-              recipient={data.members.find((m) => m.id === to)}
-              amount={amount}
-              note={`Split: ${data.groupName}`}
-              opened={venmoOpened}
-              onOpen={() => setVenmoOpened(true)}
-            />
+            {/* Venmo is USD-only, and only the person paying can send money from their own account. */}
+            {!existing && from === data.myMemberId && to && to !== from && currency === "USD" && (
+              <VenmoPay
+                recipient={data.members.find((m) => m.id === to)}
+                amount={amount}
+                note={`Split: ${data.groupName}`}
+                opened={venmoOpened}
+                onOpen={() => setVenmoOpened(true)}
+              />
+            )}
+            <DateField label="Date" value={date} onChange={setDate} />
+            {from === to && <p className="text-sm text-muted">Pick two different people.</p>}
+          {data.requireConfirmation && to && from !== to && to !== data.myMemberId && (
+            <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">
+              It counts straight away. <span className="inline-block max-w-[12rem] truncate align-bottom">{label(to)}</span> will be asked to confirm they received it.
+            </p>
           )}
-          <DateField label="Date" value={date} onChange={setDate} />
-          {from === to && <p className="text-sm text-muted">Pick two different people.</p>}
-        {data.requireConfirmation && to && from !== to && to !== data.myMemberId && (
-          <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">
-            It counts straight away. <span className="inline-block max-w-[12rem] truncate align-bottom">{label(to)}</span> will be asked to confirm they received it.
-          </p>
-        )}
+          </fieldset>
           <ErrorText>{error}</ErrorText>
           {/* Kept apart from the primary action so it can't be tapped by accident. */}
-          {existing && (
+          {existing && !readOnly && (
             <div className="border-t border-line pt-4">
               <Button type="button" variant="danger" className="w-full" onClick={remove} disabled={pending}>
                 Delete payment

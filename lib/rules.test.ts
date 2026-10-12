@@ -5,6 +5,8 @@ import {
   hasAccess,
   archiveCutoffDate,
   canChangeExpense,
+  canDeleteExpense,
+  isAuthor,
   isPastTrip,
   isPendingPayment,
   pastArchiveCutoff,
@@ -117,5 +119,25 @@ describe("past and archived trips", () => {
     expect(canChangeExpense("expense", new Date())).toBe(false);
     expect(canChangeExpense("settlement", new Date())).toBe(true);
     expect(canChangeExpense("expense", null)).toBe(true);
+  });
+});
+
+describe("who can edit or delete", () => {
+  const alex = { id: "alex", role: "member" as const };
+  const owner = { id: "owner", role: "owner" as const };
+  it("only lets the author change an entry", () => {
+    expect(isAuthor("alex", alex)).toBe(true);
+    expect(isAuthor("sam", alex)).toBe(false);
+    expect(isAuthor("sam", owner)).toBe(false); // owners don't get to change other people's entries
+    expect(isAuthor(null, owner)).toBe(true); // no recorded author: the owner
+    expect(isAuthor(null, alex)).toBe(false);
+  });
+  it("lets the person being paid reject a waiting payment, nothing else", () => {
+    const payment = { createdBy: "sam", kind: "settlement" as const, confirmedAt: null, receiverId: "alex" };
+    expect(canDeleteExpense(payment, alex)).toBe(true); // Not received
+    expect(canDeleteExpense({ ...payment, confirmedAt: new Date() }, alex)).toBe(false); // already confirmed
+    expect(canDeleteExpense({ ...payment, kind: "expense" }, alex)).toBe(false);
+    expect(canDeleteExpense(payment, owner)).toBe(false);
+    expect(canDeleteExpense(payment, { id: "sam", role: "member" })).toBe(true); // the author
   });
 });

@@ -4,8 +4,8 @@ import { Card, Page, SectionTitle, Skeleton, TopBar, buttonStyles } from "@/comp
 import { requireMember } from "@/lib/authz";
 import { automaticPostPlan, nextPostAllowedAt } from "@/lib/discord";
 import { formatMoney } from "@/lib/money";
-import { loadMembers, loadRecentlyDeleted } from "@/lib/queries";
-import { ArchiveCard, DeleteGroupCard, DiscordCard, GroupForm, InviteCard, MembersList, PaymentsCard, RecentlyDeletedCard } from "./settings-forms";
+import { loadMembers, loadDeleted } from "@/lib/queries";
+import { ArchiveCard, DeleteGroupCard, DiscordCard, GroupForm, InviteCard, MembersList, PaymentsCard, DeletedCard } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Group settings" };
 
@@ -29,9 +29,11 @@ export default function GroupSettingsPage({ params }: PageProps<"/groups/[id]/se
 async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "params">) {
   const { id } = await params;
   const { group, member } = await requireMember(id);
-  const [members, deleted] = await Promise.all([loadMembers(id), loadRecentlyDeleted(id)]);
   const isOwner = member.role === "owner";
+  // Deleted items (and their history) are for the owner only.
+  const [members, deleted] = await Promise.all([loadMembers(id), isOwner ? loadDeleted(id) : Promise.resolve([])]);
   const names = new Map(members.map((m) => [m.id, m.displayName]));
+  const personName = (memberId: string) => (memberId === member.id ? "You" : (names.get(memberId) ?? "Someone"));
   const now = new Date();
 
   return (
@@ -76,19 +78,26 @@ async function Settings({ params }: Pick<PageProps<"/groups/[id]/settings">, "pa
           <GroupForm groupId={id} name={group.name} baseCurrency={group.baseCurrency} tripStart={group.tripStart} tripEnd={group.tripEnd} />
         </Card>
 
-        <SectionTitle>Recently deleted</SectionTitle>
-        <RecentlyDeletedCard
-          groupId={id}
-          archived={!!group.archivedAt}
-          items={deleted.map((d) => ({
-            id: d.id,
-            kind: d.kind,
-            description: d.description,
-            amountLabel: formatMoney(d.amountMinor, d.currency),
-            deletedAt: d.deletedAt,
-            deletedBy: d.deletedBy ? (d.deletedBy === member.id ? "you" : (names.get(d.deletedBy) ?? "someone")) : "someone",
-          }))}
-        />
+        {isOwner && (
+          <>
+            <SectionTitle>Deleted</SectionTitle>
+            <DeletedCard
+              groupId={id}
+              archived={!!group.archivedAt}
+              items={deleted.map((d) => ({
+                id: d.id,
+                kind: d.kind,
+                description: d.description,
+                amountLabel: formatMoney(d.amountMinor, d.currency),
+                date: d.date,
+                paidBy: personName(d.payerId),
+                paidTo: d.paidTo ? personName(d.paidTo) : null,
+                deletedAt: d.deletedAt,
+                deletedBy: d.deletedBy ? (d.deletedBy === member.id ? "you" : (names.get(d.deletedBy) ?? "someone")) : "someone",
+              }))}
+            />
+          </>
+        )}
 
         <SectionTitle>Archive</SectionTitle>
         <ArchiveCard

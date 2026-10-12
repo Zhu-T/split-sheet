@@ -106,6 +106,24 @@ export function shouldAutoArchive(g: { tripEnd: string | null; archivedAt: Date 
   return !g.archivedAt && g.autoArchive && pastArchiveCutoff(g.tripEnd, now);
 }
 
+type Me = { id: string; role: "owner" | "member" };
+
+/**
+ * Only whoever added an expense or payment can edit or delete it. Entries with no recorded
+ * author (none are expected; it's a safety net) fall to the group owner.
+ */
+export function isAuthor(createdBy: string | null, me: Me): boolean {
+  return createdBy ? createdBy === me.id : me.role === "owner";
+}
+
+/** Deleting: the author, or the person being paid rejecting a payment that waits for them ("Not received"). */
+export function canDeleteExpense(
+  e: { createdBy: string | null; kind: "expense" | "settlement"; confirmedAt: Date | string | null; receiverId: string | null },
+  me: Me,
+): boolean {
+  return isAuthor(e.createdBy, me) || (isPendingPayment(e) && e.receiverId === me.id);
+}
+
 /** Archived trips keep their expenses read-only; payments are still allowed so people can settle up. */
 export function canChangeExpense(kind: "expense" | "settlement", archivedAt: Date | string | null): boolean {
   return kind === "settlement" || !archivedAt;

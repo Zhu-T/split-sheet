@@ -2,6 +2,7 @@
 
 import { and, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
+import { notFound } from "next/navigation";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import type { ExpenseSnapshot } from "@/db/schema";
@@ -11,7 +12,7 @@ import { getRate } from "@/lib/fx";
 import { describeChanges, describeEvent, snapshotsDiffer } from "@/lib/history";
 import { decimals, formatMoney, parseAmount } from "@/lib/money";
 import { asCurrency } from "@/lib/queries";
-import { canChangeExpense, LIMITS, membersBelongToGroup, paymentConfirmedOnSave } from "@/lib/rules";
+import { canChangeExpense, canDeleteExpense, isAuthor, LIMITS, membersBelongToGroup, paymentConfirmedOnSave } from "@/lib/rules";
 import { computeShares, SPLIT_TYPES, type SplitInput, type SplitType } from "@/lib/split";
 import type { ActionResult } from "./groups";
 
@@ -48,6 +49,8 @@ function toSplitInputs(type: SplitType, raw: { memberId: string; value: string }
   }
   return inputs;
 }
+
+const NOT_AUTHOR = "Only the person who added this can change or delete it.";
 
 export async function saveExpense(groupId: string, raw: ExpenseInput): Promise<ActionResult> {
   const { group, member: me } = await requireMember(groupId);
@@ -148,6 +151,7 @@ export async function saveExpense(groupId: string, raw: ExpenseInput): Promise<A
         )
         .for("update");
       if (!existing) return { error: "This expense no longer exists" };
+      if (!isAuthor(existing.createdBy, me)) return { error: NOT_AUTHOR };
       if (existing.kind !== input.kind) return { error: "An expense can't be turned into a payment (or back)" };
       if (input.expectedUpdatedAt && existing.updatedAt.toISOString() !== input.expectedUpdatedAt) {
         return { error: "Someone else just changed this expense. Close and reopen it to see their changes." };
@@ -201,12 +205,17 @@ export async function deleteExpense(groupId: string, expenseId: string): Promise
   const now = new Date();
   return db.transaction(async (tx) => {
     const [row] = await tx
-      .select({ kind: schema.expenses.kind })
+      .select({ kind: schema.expenses.kind, createdBy: schema.expenses.createdBy, confirmedAt: schema.expenses.confirmedAt })
       .from(schema.expenses)
       .where(and(eq(schema.expenses.id, expenseId), eq(schema.expenses.groupId, groupId), isNull(schema.expenses.deletedAt)))
       .for("update");
     if (!row) return { error: "This expense no longer exists" };
     if (!canChangeExpense(row.kind, group.archivedAt)) return { error: ARCHIVED };
+    const [receiver] =
+      row.kind === "settlement"
+        ? await tx.select({ memberId: schema.expenseSplits.memberId }).from(schema.expenseSplits).where(eq(schema.expenseSplits.expenseId, expenseId))
+        : [];
+    if (!canDeleteExpense({ ...row, receiverId: receiver?.memberId ?? null }, me)) return { error: NOT_AUTHOR };
     await tx.update(schema.expenses).set({ deletedAt: now, updatedAt: now }).where(eq(schema.expenses.id, expenseId));
     await tx.insert(schema.expenseEvents).values({ expenseId, groupId, memberId: me.id, action: "deleted", createdAt: now });
     refresh();
@@ -214,7 +223,7 @@ export async function deleteExpense(groupId: string, expenseId: string): Promise
   });
 }
 
-/** Undo a delete (from the toast or Recently deleted). Any member can, as any member can delete. */
+/** Undo a delete (from the toast, or the owner's Deleted list). Any member can, as any member can delete. */
 export async function restoreExpense(groupId: string, expenseId: string): Promise<ActionResult> {
   const { group, member: me } = await requireMember(groupId);
   if (!z.uuid().safeParse(expenseId).success) return { error: "Unknown expense" };
@@ -232,6 +241,30 @@ export async function restoreExpense(groupId: string, expenseId: string): Promis
     refresh();
     return {};
   });
+}
+
+/** Owner only: permanently remove one deleted expense or payment (and its history). */
+export async function purgeExpense(groupId: string, expenseId: string): Promise<ActionResult> {
+  const { member } = await requireMember(groupId);
+  if (member.role !== "owner") notFound();
+  if (!z.uuid().safeParse(expenseId).success) return { error: "Unknown expense" };
+  // Only something already deleted; live expenses go through the normal delete (and Undo) first.
+  const removed = await db
+    .delete(schema.expenses)
+    .where(and(eq(schema.expenses.id, expenseId), eq(schema.expenses.groupId, groupId), isNotNull(schema.expenses.deletedAt)))
+    .returning({ id: schema.expenses.id });
+  if (!removed.length) return { error: "This was already removed" };
+  refresh();
+  return {};
+}
+
+/** Owner only: permanently remove everything in the group's Deleted list. */
+export async function clearDeleted(groupId: string): Promise<ActionResult> {
+  const { member } = await requireMember(groupId);
+  if (member.role !== "owner") notFound();
+  await db.delete(schema.expenses).where(and(eq(schema.expenses.groupId, groupId), isNotNull(schema.expenses.deletedAt)));
+  refresh();
+  return {};
 }
 
 /** The person being paid confirms they received a payment. */

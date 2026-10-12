@@ -10,6 +10,7 @@ import { Sheet } from "@/components/sheet";
 import { Button, ErrorText, Field, Money, cx, inputClass } from "@/components/ui";
 import { isCurrency, type Currency } from "@/lib/currencies";
 import { convert, formatMoney, parseAmount, toDecimalString } from "@/lib/money";
+import { isAuthor } from "@/lib/rules";
 import { computeShares, type SplitType } from "@/lib/split";
 import type { ExpenseView, GroupData } from "./group-screen";
 
@@ -148,8 +149,11 @@ export function ExpenseSheet({
         ? { label: `${+(100 - preview.entered).toFixed(4)}%`, ok: Math.abs(100 - preview.entered) < 1e-9 }
         : null;
 
-  // Archived trips: expenses are read-only (history still visible).
-  const readOnly = data.archived;
+  // Read-only (history still visible) on archived trips, and for anyone but the person who added it.
+  const me = { id: data.myMemberId, role: data.isOwner ? ("owner" as const) : ("member" as const) };
+  const notMine = !!expense && !isAuthor(expense.authorId, me);
+  const readOnly = data.archived || notMine;
+  const authorName = expense?.authorId ? (data.members.find((m) => m.id === expense.authorId)?.name ?? "the person who added it") : "the group owner";
 
   return (
     <>
@@ -160,7 +164,9 @@ export function ExpenseSheet({
         title={readOnly ? "Expense" : expense ? "Edit expense" : "Add expense"}
         footer={
           readOnly ? (
-            <p className="pb-1 text-center text-sm text-muted">This trip is archived, so expenses can&apos;t be changed.</p>
+            <p className="pb-1 text-center text-sm text-muted">
+              {data.archived ? "This trip is archived, so expenses can’t be changed." : `Only ${authorName} can edit or delete this expense.`}
+            </p>
           ) : (
             <Button type="button" className="w-full" onClick={submit} disabled={pending}>
               {pending ? "Saving…" : expense ? "Save changes" : "Add expense"}

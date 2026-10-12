@@ -18,10 +18,11 @@ import {
   updateMember,
   type WebhookFormState,
 } from "@/app/actions/groups";
-import { restoreExpense } from "@/app/actions/expenses";
+import { clearDeleted, purgeExpense, restoreExpense } from "@/app/actions/expenses";
 import { useConfirm } from "@/components/confirm";
 import { CurrencySelect } from "@/components/currency-select";
 import { DateRangeField } from "@/components/date-range";
+import { HistorySection } from "@/components/history-section";
 import { ARCHIVE_AFTER_DAYS } from "@/lib/rules";
 import { Sheet } from "@/components/sheet";
 import { Button, Card, ErrorText, Field, Initials, cx, inputClass } from "@/components/ui";
@@ -574,69 +575,178 @@ export function ArchiveCard({
   );
 }
 
-type DeletedItem = { id: string; kind: "expense" | "settlement"; description: string; amountLabel: string; deletedAt: string; deletedBy: string };
+type DeletedItem = {
+  id: string;
+  kind: "expense" | "settlement";
+  description: string;
+  amountLabel: string;
+  date: string;
+  paidBy: string;
+  paidTo: string | null;
+  deletedAt: string;
+  deletedBy: string;
+};
 
-/** Anything deleted in the last 30 days, with Restore. */
-export function RecentlyDeletedCard({ groupId, items, archived }: { groupId: string; items: DeletedItem[]; archived: boolean }) {
+function shortDate(iso: string) {
+  return new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/**
+ * Owner only: everything deleted in this group, kept until the owner removes it. Opening an item
+ * shows what it was, its full history (who added, edited and deleted it), Restore and, only there,
+ * Delete permanently. "Clear deleted" removes them all for good.
+ */
+export function DeletedCard({ groupId, items, archived }: { groupId: string; items: DeletedItem[]; archived: boolean }) {
   const [busy, startTransition] = useTransition();
   const [error, setError] = useState<string>();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
+  // Keep showing the last opened item while the sheet animates closed (or after it's gone from the list).
+  const [shown, setShown] = useState<DeletedItem | null>(null);
+  const current = items.find((it) => it.id === openId) ?? null;
+  if (current && current !== shown) setShown(current);
+
   if (items.length === 0) {
     return (
       <Card className="p-4">
-        <p className="text-sm text-muted">Nothing deleted in the last 30 days.</p>
+        <p className="text-sm text-muted">Nothing deleted. Deleted expenses and payments are kept here, for you only, until you clear them.</p>
       </Card>
     );
   }
+
+  const restorable = (it: DeletedItem) => !archived || it.kind === "settlement"; // archived trips: expenses are read-only
+  const close = () => setOpenId(null);
+
   return (
     <Card>
+      {confirmDialog}
       <details className="group">
         <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-sm font-medium">
           <svg viewBox="0 0 24 24" className="size-4 text-muted transition-transform duration-200 group-open:rotate-90" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
             <path d="M9 6l6 6-6 6" />
           </svg>
-          {items.length} deleted in the last 30 days
+          {items.length} deleted {items.length === 1 ? "item" : "items"}
         </summary>
         <ul className="divide-y divide-line border-t border-line">
-          {items.map((it) => {
-            // On archived trips only payments can come back (expenses are read-only).
-            const restorable = !archived || it.kind === "settlement";
-            return (
-              <li key={it.id} className="flex items-center gap-3 px-4 py-2.5">
-                <div className="min-w-0 flex-1">
+          {items.map((it) => (
+            <li key={it.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(undefined);
+                  setOpenId(it.id);
+                }}
+                className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-2/60"
+              >
+                <span className="min-w-0 flex-1">
                   {/* Only the description truncates; the amount always stays visible. */}
-                  <p className="flex min-w-0 text-[15px] font-medium">
+                  <span className="flex min-w-0 text-[15px] font-medium">
                     <span className="truncate">{it.kind === "settlement" ? "Payment" : it.description}</span>
                     <span className="shrink-0 font-normal whitespace-pre text-muted"> · {it.amountLabel}</span>
-                  </p>
-                  <p className="truncate text-sm text-muted" suppressHydrationWarning>
-                    Deleted by {it.deletedBy} · {new Date(it.deletedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                  </p>
-                </div>
-                {restorable && (
-                  <Button
-                    variant="secondary"
-                    className="min-h-10 px-3 text-sm"
-                    disabled={busy}
-                    onClick={() =>
-                      startTransition(async () => {
-                        const r = await restoreExpense(groupId, it.id);
-                        setError(r.error);
-                      })
-                    }
-                  >
-                    Restore
-                  </Button>
-                )}
-              </li>
-            );
-          })}
+                  </span>
+                  <span className="block truncate text-sm text-muted" suppressHydrationWarning>
+                    Deleted by {it.deletedBy} · {shortDate(it.deletedAt)}
+                  </span>
+                </span>
+                <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              </button>
+            </li>
+          ))}
         </ul>
-        {error && (
-          <div className="px-4 pb-3">
-            <ErrorText>{error}</ErrorText>
+        <div className="border-t border-line p-4">
+          <Button
+            variant="danger"
+            className="w-full"
+            disabled={busy}
+            onClick={async () => {
+              const ok = await confirm({
+                title: `Permanently delete ${items.length} ${items.length === 1 ? "item" : "items"}?`,
+                message: "They and their history are removed for good and can't be restored.",
+                confirmLabel: "Delete permanently",
+                destructive: true,
+              });
+              if (ok)
+                startTransition(async () => {
+                  const r = await clearDeleted(groupId);
+                  setError(r.error);
+                });
+            }}
+          >
+            Clear deleted
+          </Button>
+          {error && !openId && <ErrorText>{error}</ErrorText>}
+        </div>
+      </details>
+
+      <Sheet
+        open={!!current}
+        onClose={close}
+        title={shown?.kind === "settlement" ? "Deleted payment" : "Deleted expense"}
+        footer={
+          shown && restorable(shown) ? (
+            <Button
+              className="w-full"
+              disabled={busy}
+              onClick={() =>
+                startTransition(async () => {
+                  const r = await restoreExpense(groupId, shown.id);
+                  if (r.error) setError(r.error);
+                  else close();
+                })
+              }
+            >
+              Restore
+            </Button>
+          ) : undefined
+        }
+      >
+        {shown && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-3xl font-semibold tabular-nums">{shown.amountLabel}</p>
+              <p className="mt-1 text-[15px] font-medium break-words">
+                {shown.kind === "settlement" ? `${shown.paidBy} paid ${shown.paidTo ?? "someone"}` : shown.description}
+              </p>
+              <p className="text-sm text-muted" suppressHydrationWarning>
+                {shown.kind === "settlement" ? "" : `Paid by ${shown.paidBy} · `}
+                {shortDate(shown.date)}
+              </p>
+            </div>
+            <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted" suppressHydrationWarning>
+              Deleted by {shown.deletedBy} on {shortDate(shown.deletedAt)}. It doesn&apos;t count towards balances.
+              {!restorable(shown) && " Unarchive the trip to restore it."}
+            </p>
+            <HistorySection groupId={groupId} expenseId={shown.id} />
+            <ErrorText>{openId ? error : undefined}</ErrorText>
+            {/* Kept apart from Restore so it can't be tapped by accident. */}
+            <div className="border-t border-line pt-4">
+              <Button
+                variant="danger"
+                className="w-full"
+                disabled={busy}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Delete permanently?",
+                    message: "This and its history are removed for good and can't be restored.",
+                    confirmLabel: "Delete permanently",
+                    destructive: true,
+                  });
+                  if (ok)
+                    startTransition(async () => {
+                      const r = await purgeExpense(groupId, shown.id);
+                      if (r.error) setError(r.error);
+                      else close();
+                    });
+                }}
+              >
+                Delete permanently
+              </Button>
+            </div>
           </div>
         )}
-      </details>
+      </Sheet>
     </Card>
   );
 }

@@ -37,6 +37,8 @@ export type ExpenseView = {
   pending: boolean;
   /** Changed since it was added (shown as a small "edited" note). */
   edited: boolean;
+  /** Who added it: only they can edit or delete it (see isAuthor). */
+  authorId: string | null;
   splits: { memberId: string; shareMinor: number; input: number }[];
 };
 

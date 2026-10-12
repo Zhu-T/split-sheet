@@ -76,6 +76,7 @@ async function Group({ params }: Pick<PageProps<"/groups/[id]">, "params">) {
       updatedAt: e.updatedAt.toISOString(),
       pending: isPendingPayment(e),
       edited: e.edited,
+      authorId: e.createdBy,
       splits: e.splits,
     })),
     balances: Object.fromEntries(balances),

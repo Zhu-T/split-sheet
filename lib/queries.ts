@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { computeBalances, type LedgerEntry } from "./balances";
 import { isCurrency, type Currency } from "./currencies";
@@ -136,15 +136,13 @@ export function loadGroupNav(userId: string) {
     .orderBy(desc(schema.groups.createdAt));
 }
 
-/** Expenses and payments deleted in the last 30 days, newest first, with who deleted them. */
-export async function loadRecentlyDeleted(groupId: string) {
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+/** Deleted expenses and payments, newest deletion first, with who deleted them. Kept until the owner removes them for good. */
+export async function loadDeleted(groupId: string) {
   const rows = await db
     .select()
     .from(schema.expenses)
-    .where(and(eq(schema.expenses.groupId, groupId), gt(schema.expenses.deletedAt, since)))
-    .orderBy(desc(schema.expenses.deletedAt))
-    .limit(50);
+    .where(and(eq(schema.expenses.groupId, groupId), isNotNull(schema.expenses.deletedAt)))
+    .orderBy(desc(schema.expenses.deletedAt));
   if (!rows.length) return [];
   const deletions = await db
     .select({ expenseId: schema.expenseEvents.expenseId, memberId: schema.expenseEvents.memberId, at: schema.expenseEvents.createdAt })
@@ -153,12 +151,24 @@ export async function loadRecentlyDeleted(groupId: string) {
     .orderBy(desc(schema.expenseEvents.createdAt));
   const deleter = new Map<string, string | null>();
   for (const d of deletions) if (!deleter.has(d.expenseId)) deleter.set(d.expenseId, d.memberId);
+  // Who a deleted payment went to (a payment has exactly one split: the person paid).
+  const paymentIds = rows.filter((r) => r.kind === "settlement").map((r) => r.id);
+  const receivers = paymentIds.length
+    ? await db
+        .select({ expenseId: schema.expenseSplits.expenseId, memberId: schema.expenseSplits.memberId })
+        .from(schema.expenseSplits)
+        .where(inArray(schema.expenseSplits.expenseId, paymentIds))
+    : [];
+  const paidTo = new Map(receivers.map((r) => [r.expenseId, r.memberId]));
   return rows.map((e) => ({
     id: e.id,
     kind: e.kind,
     description: e.description,
     amountMinor: e.amountMinor,
     currency: asCurrency(e.currency),
+    date: e.date,
+    payerId: e.payerMemberId,
+    paidTo: paidTo.get(e.id) ?? null,
     deletedAt: e.deletedAt!.toISOString(),
     deletedBy: deleter.get(e.id) ?? null,
   }));
