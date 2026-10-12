@@ -522,35 +522,62 @@ function Activity({
 }) {
   const [query, setQuery] = useState("");
   const [newestFirst, setNewestFirst] = useState(true);
+  const [expensesOnly, setExpensesOnly] = useState(false);
   const [limit, setLimit] = useState(PAGE);
+  const hasPayments = data.expenses.some((e) => e.kind === "settlement");
   // Expenses arrive newest first (by date, then most recently added); oldest first is the reverse.
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = data.expenses.filter((e) => !q || e.description.toLowerCase().includes(q));
+    const list = data.expenses.filter(
+      (e) => (!expensesOnly || e.kind === "expense") && (!q || e.description.toLowerCase().includes(q)),
+    );
     return newestFirst ? list : [...list].reverse();
-  }, [data.expenses, query, newestFirst]);
+  }, [data.expenses, query, newestFirst, expensesOnly]);
   const shown = items.slice(0, limit);
 
   return (
     <>
       <div className="mt-6 mb-2 flex items-center justify-between px-1">
         <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">Activity</h2>
-        {data.expenses.length > 1 && (
-          <button
-            type="button"
-            onClick={() => {
-              setNewestFirst((v) => !v);
-              setLimit(PAGE);
-            }}
-            aria-label={newestFirst ? "Sorted newest first. Switch to oldest first" : "Sorted oldest first. Switch to newest first"}
-            className="-mr-2 flex min-h-10 items-center gap-1 rounded-full px-2 text-xs font-medium text-muted transition hover:bg-surface-2"
-          >
-            {newestFirst ? "Newest first" : "Oldest first"}
-            <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", !newestFirst && "rotate-180")} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12 5v14M6 13l6 6 6-6" />
-            </svg>
-          </button>
-        )}
+        <div className="-mr-2 flex items-center gap-1">
+          {hasPayments && (
+            // Hide payments to see only what was spent.
+            <button
+              type="button"
+              role="switch"
+              aria-checked={expensesOnly}
+              onClick={() => {
+                setExpensesOnly((v) => !v);
+                setLimit(PAGE);
+              }}
+              className={cx(
+                "flex min-h-10 items-center gap-1.5 rounded-full px-2 text-xs font-medium whitespace-nowrap transition hover:bg-surface-2",
+                expensesOnly ? "text-accent" : "text-muted",
+              )}
+            >
+              <span aria-hidden className={cx("relative h-4 w-7 rounded-full transition-colors duration-200", expensesOnly ? "bg-accent" : "bg-line")}>
+                <span className={cx("absolute top-0.5 left-0.5 size-3 rounded-full bg-surface shadow transition-transform duration-200", expensesOnly && "translate-x-3")} />
+              </span>
+              Hide payments
+            </button>
+          )}
+          {data.expenses.length > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                setNewestFirst((v) => !v);
+                setLimit(PAGE);
+              }}
+              aria-label={newestFirst ? "Sorted newest first. Switch to oldest first" : "Sorted oldest first. Switch to newest first"}
+              className="flex min-h-10 items-center gap-1 rounded-full px-2 text-xs font-medium whitespace-nowrap text-muted transition hover:bg-surface-2"
+            >
+              {newestFirst ? "Newest first" : "Oldest first"}
+              <svg viewBox="0 0 24 24" className={cx("size-4 transition-transform duration-200", !newestFirst && "rotate-180")} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14M6 13l6 6 6-6" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
       {data.expenses.length > 8 && (
         <input
@@ -568,7 +595,7 @@ function Activity({
       )}
       <Card className="overflow-hidden">
         {items.length === 0 ? (
-          <p className="px-4 py-8 text-center text-muted">{query ? "No matches." : "No expenses yet."}</p>
+          <p className="px-4 py-8 text-center text-muted">{query ? "No matches." : expensesOnly && data.expenses.length > 0 ? "No expenses, only payments." : "No expenses yet."}</p>
         ) : (
           <ul className="divide-y divide-line">
             {shown.map((e, i) => (
