@@ -142,7 +142,6 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
   const archived = data.archived;
   const myNet = data.balances[me] ?? 0;
   const mine = data.transfers.filter((t) => t.from === me || t.to === me);
-  const iOwe = mine.filter((t) => t.from === me);
 
   const openEntry = (e: ExpenseView | null) => {
     if (e?.kind === "settlement") setSettleSheet((s) => ({ open: true, draft: null, existing: e, key: s.key + 1 }));
@@ -264,7 +263,7 @@ export function GroupScreen({ data, nav }: { data: GroupData; nav?: ReactNode })
             <div className="mt-2 space-y-4">{panel}</div>
           </details>
         </Card>
-        <MySettlements transfers={iOwe} base={data.base} nameOf={nameOf} onSettle={openSettle} />
+        <MySettlements transfers={mine} me={me} base={data.base} nameOf={nameOf} onSettle={openSettle} />
 
         <Activity data={data} nameOf={nameOf} onOpen={openEntry} />
       </div>
@@ -460,39 +459,50 @@ function GroupPanel({
   );
 }
 
-/** Who I still need to pay, one row per person, each with Settle. */
+/** Who I pay and who pays me, one row per person, each with Settle. */
 function MySettlements({
   transfers,
+  me,
   base,
   nameOf,
   onSettle,
 }: {
   transfers: Transfer[];
+  me: string;
   base: Currency;
   nameOf: (id: string) => string;
   onSettle: (t: SettleDraft) => void;
 }) {
-  if (transfers.length === 0) return null;
+  const sections = [
+    { title: "You owe", rows: transfers.filter((t) => t.from === me), other: (t: Transfer) => t.to, tone: "text-owe" },
+    { title: "Owes you", rows: transfers.filter((t) => t.to === me), other: (t: Transfer) => t.from, tone: "text-owed" },
+  ].filter((sec) => sec.rows.length > 0);
+  if (sections.length === 0) return null;
+
   return (
     <Card className="rise mt-4 overflow-hidden">
-      <h2 className="px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">You owe</h2>
-      <ul className="divide-y divide-line">
-        {transfers.map((t, i) => {
-          const name = nameOf(t.to);
-          return (
-            <li key={t.from + t.to} className="rise flex items-center gap-3 px-4 py-3" style={{ "--i": i } as CSSProperties}>
-              <Initials name={name} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-medium">{name}</p>
-                <Money minor={t.amountMinor} currency={base} className="block text-sm font-semibold text-owe" />
-              </div>
-              <Button variant="secondary" className="min-h-10 shrink-0 px-4 text-sm" onClick={() => onSettle(t)}>
-                Settle
-              </Button>
-            </li>
-          );
-        })}
-      </ul>
+      {sections.map((sec, si) => (
+        <section key={sec.title} className={cx(si > 0 && "border-t border-line")}>
+          <h2 className="px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">{sec.title}</h2>
+          <ul className="divide-y divide-line">
+            {sec.rows.map((t, i) => {
+              const name = nameOf(sec.other(t));
+              return (
+                <li key={t.from + t.to} className="rise flex items-center gap-3 px-4 py-3" style={{ "--i": i } as CSSProperties}>
+                  <Initials name={name} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-medium">{name}</p>
+                    <Money minor={t.amountMinor} currency={base} className={cx("block text-sm font-semibold", sec.tone)} />
+                  </div>
+                  <Button variant="secondary" className="min-h-10 shrink-0 px-4 text-sm" onClick={() => onSettle(t)}>
+                    Settle
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
     </Card>
   );
 }
